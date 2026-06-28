@@ -32,9 +32,13 @@ capture (Keep / clipboard)
      `Sentence · Expression · Reading · Definition · Notes` and optionally `Source`.
      No `Hint` needed — the script skips fields a note type doesn't have.
 3. **Env**: `export OPENAI_API_KEY=...` (optionally `OPENAI_MODEL`, default `gpt-5.5`).
-4. **Index**: `python3 corpus.py build` to normalise `~/Chinese Text Analysis` into
-   `~/Chinese Text Analysis/_index`.
-5. **Alias** (optional): symlink `opus` onto your PATH, e.g. `alias om=opus`.
+4. **Index**: `python3 corpus.py build` normalises `~/Chinese Text Analysis` into a
+   `_index/` folder **beside the scripts** (kept out of the corpus so cloud-sync clients
+   don't try to sync thousands of generated files). `opusmine` and `corpus` both resolve
+   it from their own location, so keep them in the same directory.
+5. **Alias** (optional): `alias om=opus`. If you instead symlink onto your PATH, the
+   `_index/`, `card_prompt_zh.md`, and the scripts all resolve next to the *real* files
+   (symlinks are followed), so keep them together there.
 
 ## Daily use
 
@@ -55,19 +59,38 @@ so clipboard is the path; if you ever capture into something that syncs a `.txt`
 
 ## Capture grammar
 
-One line per card. A trailing `#…` becomes a model instruction (never goes on the card).
+One line per card. The target/anchor split is on the **first space or Tab** (so phone
+capture with spaces is fine). A trailing `#…` becomes a model instruction (never shown
+on the card).
 
 | you type | result |
 |---|---|
 | `word` | vocab card; mine a sentence for `word` |
-| `word⇥anchor` | vocab card; mine the shortest line with `word` **and** `anchor` |
-| `word⇥a full sentence。` | vocab card; use that literal sentence (explicit target) |
+| `word anchor` | vocab card; mine the shortest line with `word` **and** `anchor` |
+| `word a full sentence。` | vocab card; use that literal sentence (explicit target) |
 | `a full sentence。` | vocab card; literal sentence, model picks the target |
 | `>…` (prefix) | same, but a **sentence** card (front = sentence) |
 | `word` with no corpus hit | context-less card, empty sentence (Pleco shortlist) |
 | `… #explain the whole sentence` | passes that instruction to the model |
 
-`⇥` is a Tab. "Looks like a sentence" = ≥12 chars or contains 。！？…；
+"Looks like a sentence" = ≥12 chars or contains 。！？…；  (so a short two-word line is
+read as word+anchor, a long/punctuated one as a literal sentence).
+
+## Keeping the corpus clean
+
+The corpus can be a junk drawer. `corpus.py` ignores any folder whose name is in
+`IGNORE_DIRS` (top of the file) — drop old/raw/unwanted text in such a folder and the
+index never sees it. `build --exclude STR` is the ad-hoc version for one-offs.
+
+Game dumps (`AnimeGameData`, `TurnBasedGameData`) are meant to live *outside* the
+corpus, as the `DUMPS` fallback `opusmine` greps directly. If a dump has leaked into the
+corpus and exploded the index into thousands of files, either move it out and rebuild, or
+add its folder name to `IGNORE_DIRS`.
+
+`corpus.py add <dir> --merge NAME` collapses a multi-file source (a game dump, a chapter
+folder) into a single `NAME.txt` corpus file indexed as one source. **If the merged
+directory lives inside the corpus, also add it to `IGNORE_DIRS`** — otherwise `build`
+will re-index the raw originals per-file alongside the merged copy.
 
 ## Charset
 

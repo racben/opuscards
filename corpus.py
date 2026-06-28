@@ -13,12 +13,11 @@ Two jobs:
       normalises the whole corpus root. Run after editing the cleaner, or to
       refresh everything.
 
-The index lives at <script dir>/_index (next to corpus.py itself, not inside
-the corpus root), one same-stem file per source, so opusmine reads the Source
-for free from the filename. It is a DERIVED artifact: safe to delete and
-rebuild. Keeping it outside the corpus root means GDrive/sync tools ignore it.
-Originals are never modified; use `rch` on the corpus root when you want the
-untrimmed, original-charset line in full context.
+The index lives in a `_index` folder beside these scripts (kept out of the corpus so
+cloud-sync clients don't try to sync thousands of generated files), one same-stem file
+per source, so opusmine reads the Source for free from the filename. It is a DERIVED
+artifact: safe to delete and rebuild. Originals are never modified; use `rch` on the
+corpus root when you want the untrimmed, original-charset line in full context.
 
 Design choices baked in here:
   - Charset is left AS-IS (no opencc). Cross-charset matching is done on the
@@ -39,10 +38,21 @@ import sys
 from pathlib import Path
 
 HOME = Path.home()
-SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CORPUS = HOME / "Chinese Text Analysis"  # corpus root; originals live here
-DEFAULT_INDEX = SCRIPT_DIR / "_index"            # derived index lives next to this script
+INDEX_DIRNAME = "_index"                         # the index directory's name
+INDEX_DIR = Path(__file__).resolve().parent / INDEX_DIRNAME   # ...and it lives beside the scripts
 TEXT_SUFFIXES = {".txt", ".md"}                  # which files in the corpus get indexed
+
+# Directories (matched by NAME, anywhere in a path) that build/add pretend don't exist.
+# This is the junk-drawer switch: dump old/raw/unwanted text into a folder named here
+# and the index stays clean without any command-line flags. Edit freely.
+IGNORE_DIRS = {
+    INDEX_DIRNAME,        # never re-index the index itself
+    "old",
+    "Anki_dump",
+    # add your own cruft folders, e.g.:
+    # "raw_dumps", "scratch", "hsr_dump", "_attic",
+}
 
 # --- cleaning rules ----------------------------------------------------------
 # CJK = any line WITHOUT one of these characters is dropped. This single test
@@ -111,27 +121,51 @@ def write_index(path: Path, index_dir: Path, taken: dict[str, Path]) -> tuple[Pa
     return dest, len(lines)
 
 
-def iter_corpus_files(inputs: list[str], index_dir: Path) -> list[Path]:
+def _ignored(f: Path, index_dir: Path, excludes: list[str]) -> bool:
+    if index_dir in f.parents:
+        return True
+    if IGNORE_DIRS.intersection(f.parts):          # any path component is an ignored dir name
+        return True
+    return any(ex in str(f) for ex in excludes)     # ad-hoc substring excludes
+
+
+def iter_corpus_files(inputs: list[str], index_dir: Path, excludes: list[str]) -> list[Path]:
     files: list[Path] = []
     for item in inputs:
         p = Path(item).expanduser()
         if p.is_dir():
             for f in sorted(p.rglob("*")):
-                if f.is_file() and f.suffix in TEXT_SUFFIXES and index_dir not in f.parents:
+                if f.is_file() and f.suffix in TEXT_SUFFIXES and not _ignored(f, index_dir, excludes):
                     files.append(f)
         elif p.is_file():
-            files.append(p)
+            if not _ignored(p, index_dir, excludes):
+                files.append(p)
         else:
             print(f"skip (not found): {p}", file=sys.stderr)
     return files
 
 
+def collect_text_files(items: list[str]) -> list[Path]:
+    """Expand a list of files/dirs into the text files within (for --merge)."""
+    out: list[Path] = []
+    for item in items:
+        p = Path(item).expanduser()
+        if p.is_dir():
+            out += [f for f in sorted(p.rglob("*")) if f.is_file() and f.suffix in TEXT_SUFFIXES]
+        elif p.is_file():
+            out.append(p)
+        else:
+            print(f"skip (not found): {p}", file=sys.stderr)
+    return out
+
+
 def cmd_build(args: argparse.Namespace) -> int:
-    index_dir = args.out or DEFAULT_INDEX
+    index_dir = args.out or INDEX_DIR
     index_dir.mkdir(parents=True, exist_ok=True)
     inputs = args.paths or [str(args.corpus)]
+    excludes = getattr(args, "exclude", []) or []
     taken: dict[str, Path] = {}
-    for f in iter_corpus_files(inputs, index_dir):
+    for f in iter_corpus_files(inputs, index_dir, excludes):
         res = write_index(f, index_dir, taken)
         if res:
             dest, n = res
@@ -141,9 +175,34 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_add(args: argparse.Namespace) -> int:
     args.corpus.mkdir(parents=True, exist_ok=True)
-    index_dir = DEFAULT_INDEX
+    index_dir = INDEX_DIR
     index_dir.mkdir(parents=True, exist_ok=True)
     taken: dict[str, Path] = {}
+
+    # --merge: concatenate all inputs into ONE corpus file, then index as one source.
+    # This stays consistent with `build`: the merged file is a normal corpus file, so a
+    # later rebuild regenerates it as a single source (no per-scene index explosion).
+    if args.merge:
+        sources = collect_text_files(args.files)
+        if not sources:
+            print("nothing to merge", file=sys.stderr)
+            return 1
+        name = args.merge if args.merge.endswith((".txt", ".md")) else f"{args.merge}.txt"
+        dest = args.corpus / name
+        if dest.exists() and not args.force:
+            print(f"refusing to overwrite existing {dest.name} (use --force)", file=sys.stderr)
+            return 1
+        blob = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in sources)
+        dest.write_text(blob, encoding="utf-8")
+        print(f"merged {len(sources)} files -> corpus/{dest.name}")
+        res = write_index(dest, index_dir, taken)
+        if res:
+            idest, n = res
+            print(f"  indexed: {n} lines -> {idest.name}")
+        else:
+            print("  (no indexable lines found)")
+        return 0
+
     rc = 0
     for item in args.files:
         src = Path(item).expanduser()
@@ -194,15 +253,22 @@ def main() -> int:
                        help=f"corpus root (default: {DEFAULT_CORPUS})")
 
     p_add = sub.add_parser("add", help="copy file(s) into the corpus and index them",
-                           formatter_class=argparse.RawDescriptionHelpFormatter)
-    p_add.add_argument("files", nargs="+", help="file(s) to ingest from anywhere")
-    p_add.add_argument("--force", action="store_true", help="overwrite a differing corpus file of the same name")
+                           formatter_class=argparse.RawDescriptionHelpFormatter,
+                           epilog=("examples:\n"
+                                   "  corpus.py add novel.txt\n"
+                                   "  corpus.py add ./hsr_dump_dir --merge 'Star Rail'\n"))
+    p_add.add_argument("files", nargs="+", help="file(s) or dir(s) to ingest from anywhere")
+    p_add.add_argument("--merge", metavar="NAME",
+                       help="concatenate all inputs into one corpus file NAME and index as a single source")
+    p_add.add_argument("--force", action="store_true", help="overwrite an existing corpus file of the same name")
     add_corpus_opt(p_add)
     p_add.set_defaults(func=cmd_add)
 
     p_build = sub.add_parser("build", help="(re)build the index from corpus files")
     p_build.add_argument("paths", nargs="*", help="files/dirs to index (default: whole corpus root)")
-    p_build.add_argument("--out", type=Path, default=None, help="index dir (default: <corpus>/_index)")
+    p_build.add_argument("--out", type=Path, default=None, help="index dir (default: _index beside the scripts)")
+    p_build.add_argument("--exclude", action="append", default=[], metavar="STR",
+                         help="skip any path containing STR (repeatable), e.g. --exclude TurnBased")
     add_corpus_opt(p_build)
     p_build.set_defaults(func=cmd_build)
 

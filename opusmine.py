@@ -28,9 +28,8 @@ import sys
 from pathlib import Path
 
 HOME = Path.home()
-SCRIPT_DIR = Path(__file__).resolve().parent
-CORPUS = HOME / "Chinese Text Analysis"
-INDEX = SCRIPT_DIR / "_index"
+CORPUS = HOME / "Chinese Text Analysis"               # originals (searched by `rch`, not opusmine)
+INDEX = Path(__file__).resolve().parent / "_index"    # flat index lives beside the scripts
 # Game dumps stay AS-IS (they already ship both charsets). Mapped to display names
 # because there's no quest-level granularity yet; upgrade the values here later.
 DUMPS = {
@@ -53,6 +52,11 @@ KEEP_WHOLE = 40
 # After trimming a long line to the target's sentence, if that sentence is shorter than
 # this, the previous sentence is prepended for context. Stops a bare 很危险！ losing its setup.
 TINY = 12
+
+# Stop collecting after this many matching candidates, then pick the shortest of them.
+# Bounds the work when a frequent word (esp. with a weak anchor) matches a lot of lines;
+# the cap is applied AFTER anchor-filtering so a disambiguating anchor is never truncated.
+MAX_HITS = 20
 
 
 def variants(text: str) -> list[str]:
@@ -139,6 +143,8 @@ def mine(target: str, anchor: str, deep: bool) -> tuple[str, str]:
                 continue
             sent = trim(text, tvars)
             candidates.append((len(sent), sent, source_for(path_str)))
+            if len(candidates) >= MAX_HITS:        # enough to pick a good short one from
+                break
         if candidates:
             candidates.sort(key=lambda c: c[0])   # shortest trimmed sentence wins
             _, sent, src = candidates[0]
@@ -163,18 +169,18 @@ def parse_line(raw: str):
         body = body[1:].strip()
 
     target = sentence = anchor = ""
-    if "\t" in body:
-        left, right = body.split("\t", 1)
-        target = left.strip()
-        right = right.strip()
+    parts = body.split(None, 1)              # split on the first run of whitespace (space OR tab)
+    if len(parts) == 2 and not is_sentence_like(parts[0]):
+        target = parts[0]
+        right = parts[1].strip()
         if is_sentence_like(right):
-            sentence = right        # literal passthrough, explicit target
+            sentence = right                 # explicit target + literal sentence
         else:
-            anchor = right          # disambiguated mining
+            anchor = right                   # word + disambiguating anchor
     elif is_sentence_like(body):
-        sentence = body             # literal passthrough, model picks target
+        sentence = body                      # literal passthrough, model picks target
     else:
-        target = body               # bare word -> mine
+        target = body                        # bare word -> mine
 
     return note_type, target, sentence, anchor, instruction
 
@@ -185,11 +191,12 @@ def main() -> None:
         description="Resolve capture lines into  note_type<TAB>target<TAB>sentence<TAB>source<TAB>instruction  records.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "capture grammar (a trailing  #instruction  is stripped and passed to the model):\n"
+            "capture grammar (a trailing  #instruction  is stripped and passed to the model;\n"
+            " the target/anchor split is on the first space OR tab):\n"
             "  word                  vocab card; mine a sentence for `word`\n"
-            "  word <TAB> anchor     vocab card; mine the shortest line with `word` AND `anchor`\n"
-            "  word <TAB> sentence   vocab card; use that literal sentence (explicit target)\n"
-            "  sentence              vocab card; literal sentence, model picks the target\n"
+            "  word anchor           vocab card; mine the shortest line with `word` AND `anchor`\n"
+            "  word a sentence。      vocab card; use that literal sentence (explicit target)\n"
+            "  a sentence。           vocab card; literal sentence, model picks the target\n"
             "  >...                  any of the above as a SENTENCE card (front = sentence)\n"
             "  (no corpus hit)       context-less: empty sentence (e.g. a Pleco shortlist word)\n\n"
             "examples:\n"
