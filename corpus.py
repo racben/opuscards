@@ -13,10 +13,12 @@ Two jobs:
       normalises the whole corpus root. Run after editing the cleaner, or to
       refresh everything.
 
-The index lives at <corpus>/_index, one same-stem file per source, so opusmine
-reads the Source for free from the filename. It is a DERIVED artifact: safe to
-delete and rebuild. Originals are never modified; use `rch` on the corpus root
-when you want the untrimmed, original-charset line in full context.
+The index lives at <script dir>/_index (next to corpus.py itself, not inside
+the corpus root), one same-stem file per source, so opusmine reads the Source
+for free from the filename. It is a DERIVED artifact: safe to delete and
+rebuild. Keeping it outside the corpus root means GDrive/sync tools ignore it.
+Originals are never modified; use `rch` on the corpus root when you want the
+untrimmed, original-charset line in full context.
 
 Design choices baked in here:
   - Charset is left AS-IS (no opencc). Cross-charset matching is done on the
@@ -37,8 +39,9 @@ import sys
 from pathlib import Path
 
 HOME = Path.home()
+SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CORPUS = HOME / "Chinese Text Analysis"  # corpus root; originals live here
-INDEX_DIRNAME = "_index"                         # derived index lives at <corpus>/_index
+DEFAULT_INDEX = SCRIPT_DIR / "_index"            # derived index lives next to this script
 TEXT_SUFFIXES = {".txt", ".md"}                  # which files in the corpus get indexed
 
 # --- cleaning rules ----------------------------------------------------------
@@ -124,7 +127,7 @@ def iter_corpus_files(inputs: list[str], index_dir: Path) -> list[Path]:
 
 
 def cmd_build(args: argparse.Namespace) -> int:
-    index_dir = args.out or (args.corpus / INDEX_DIRNAME)
+    index_dir = args.out or DEFAULT_INDEX
     index_dir.mkdir(parents=True, exist_ok=True)
     inputs = args.paths or [str(args.corpus)]
     taken: dict[str, Path] = {}
@@ -138,7 +141,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_add(args: argparse.Namespace) -> int:
     args.corpus.mkdir(parents=True, exist_ok=True)
-    index_dir = args.corpus / INDEX_DIRNAME
+    index_dir = DEFAULT_INDEX
     index_dir.mkdir(parents=True, exist_ok=True)
     taken: dict[str, Path] = {}
     rc = 0
