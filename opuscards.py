@@ -94,17 +94,20 @@ def generate(client, model: str, system_prompt: str, sentence: str, target: str,
     data = json.loads(raw)
     return (str(data.get("expression", "")).strip(),
             str(data.get("reading", "")).strip(),
+            str(data.get("register", "")).strip(),
             str(data.get("definition", "")).strip(),
             str(data.get("notes", "")).strip())
 
 
 # --- pretty CLI --------------------------------------------------------------
-def render(note_type, expr, reading, sentence, definition, notes, source, tags, footer):
+def render(note_type, expr, reading, register, sentence, definition, notes, source, tags, footer):
     bar = c("2", "│")
     mark = c("2", "[句]" if note_type == "sentence" else "[词]")
     head = f"{mark} {c('1;33', expr)}"
     if reading:
         head += f"  {c('36', reading)}"
+    if register:
+        head += f"  {c('2', '〈' + register + '〉')}"
     if source:
         head += f"  {c('2', '·' + source)}"
     out = [head]
@@ -163,15 +166,22 @@ def main() -> int:
         model_name = NOTE_TYPES.get(note_type, NOTE_TYPES["vocab"])
         try:
             if args.dry_run:
-                expr, reading, definition, notes = (target or "测试", "cèshì", "离线预览解释。", "")
+                expr, reading, register, definition, notes = (target or "测试", "cèshì", "文", "离线预览解释。", "")
             else:
-                expr, reading, definition, notes = generate(
+                expr, reading, register, definition, notes = generate(
                     client, args.model, system_prompt, sentence, target, instruction)
 
             footer = ""
             if args.anki:
+                # Route register to its own field if the note type has one; otherwise fold it
+                # into the Definition as 〈文〉… so register survives until you add the field.
+                avail = model_fields(model_name)
+                has_register = bool(avail) and "Register" in avail
+                definition_out = definition if (has_register or not register) else f"〈{register}〉{definition}"
                 fields = {"Expression": expr, "Reading": reading, "Sentence": sentence,
-                          "Definition": definition, "Notes": notes, "Source": source, "Hint": ""}
+                          "Definition": definition_out, "Notes": notes, "Source": source, "Hint": ""}
+                if has_register:
+                    fields["Register"] = register
                 try:
                     nid = anki("addNote", note=build_note(args.deck, model_name, fields, tags))
                     footer = c("32", f"\u2514 \u2713 added \u00b7 {nid}")
@@ -183,7 +193,7 @@ def main() -> int:
                     else:
                         footer = c("31", f"\u2514 \u2717 {e}")
                         n_err += 1
-            print(render(note_type, expr, reading, sentence, definition, notes, source, tags, footer))
+            print(render(note_type, expr, reading, register, sentence, definition, notes, source, tags, footer))
             print()
         except Exception as e:
             n_err += 1
