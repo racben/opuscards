@@ -1,0 +1,67 @@
+{{FrontSide}}
+
+{{#Reading}}
+<div class="reading">{{Reading}}</div>
+{{/Reading}}
+
+<hr>
+
+<div class="sentence" id="sentenceMount">{{Sentence}}</div>
+<div id="expression" style="display:none">{{Expression}}</div>
+
+<div class="explanation">{{Definition}}</div>
+
+{{#Notes}}
+<div class="notes">📝 {{Notes}}</div>
+{{/Notes}}
+
+{{#Source}}
+<div class="source">{{Source}}</div>
+{{/Source}}
+
+<div class="tags">{{Tags}}</div>
+
+<script>
+(function () {
+  // 1. Make the vocabulary word (from FrontSide) a dictionary link
+  var targetMount = document.getElementById('targetMount');
+  if (targetMount) {
+    var expr = (targetMount.textContent || "").trim();
+    if (expr) {
+      var isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
+      var targetHref = isMobile
+        ? "plecoapi://x-callback-url/s?q=" + encodeURIComponent(expr)
+        : "https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb=" + encodeURIComponent(expr);
+      targetMount.innerHTML =
+        '<a class="targetLink" href="' + targetHref + '">' + expr + '</a>';
+    }
+  }
+
+  // 2. Highlight the vocabulary inside the example sentence (dynamic; keeps the field clean)
+  var sentenceMount = document.getElementById('sentenceMount');
+  var exprEl = document.getElementById('expression');
+  if (sentenceMount && exprEl) {
+    var vocab = (exprEl.textContent || "").trim();
+    if (vocab) {
+      var html = sentenceMount.innerHTML;
+      var escaped = vocab.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp(escaped, 'g');
+      sentenceMount.innerHTML = html.replace(re, '<b>$&</b>');
+    }
+  }
+
+  // 3. Wrap the whole sentence in a dictionary link
+  if (sentenceMount) {
+    var rawText = (sentenceMount.innerText || sentenceMount.textContent || "").trim();
+    if (rawText) {
+      var sentenceHref =
+        "https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=1&wdqchs=" +
+        encodeURIComponent(rawText);
+      sentenceMount.innerHTML =
+        '<a class="sentenceLink" href="' + sentenceHref + '">' +
+        sentenceMount.innerHTML +
+        '</a>';
+    }
+  }
+})();
+</script>

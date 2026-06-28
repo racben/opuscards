@@ -1,0 +1,180 @@
+:root {
+  --bg: #ffffff;
+  --text: #1c1c1c;
+  --muted: rgba(28,28,28,0.62);
+  --soft: rgba(28,28,28,0.78);
+  --line: rgba(0,0,0,0.12);
+  --label: rgba(28,28,28,0.45);
+  --note: rgba(28,28,28,0.60);
+  --note-border: rgba(0,0,0,0.18);
+  --accent: #b7791f;
+  --pinyin: #0b6fa4;
+  --nuance: #8a6420;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0f11;
+    --text: #eaeaea;
+    --muted: rgba(234,234,234,0.62);
+    --soft: rgba(234,234,234,0.80);
+    --line: rgba(255,255,255,0.12);
+    --label: rgba(234,234,234,0.45);
+    --note: rgba(234,234,234,0.60);
+    --note-border: rgba(255,255,255,0.18);
+    --accent: #ffd479;
+    --pinyin: #8bd3ff;
+    --nuance: #e6d3a1;
+  }
+}
+
+/* Mobile-first sizing that still looks good on desktop */
+.card {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "PingFang SC", "Noto Sans SC", "Heiti SC", sans-serif;
+  line-height: 1.65;
+  padding: 18px 18px 22px;
+  -webkit-font-smoothing: antialiased;
+}
+.targetWrap {
+  text-align: center;
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+.targetLine {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.2em;
+  flex-wrap: wrap;
+}
+
+.target {
+  font-size: clamp(28px, 5vw, 36px);
+  font-weight: 450;
+  color: var(--text);
+  margin: 0;
+}
+
+.hintInline {
+  font-size: clamp(14px, 2.6vw, 17px);
+  color: var(--muted);
+}
+
+/* Add styling for the Reading field */
+.reading {
+  text-align: center;
+  font-size: clamp(16px, 3vw, 20px);
+  color: var(--pinyin);
+  margin-bottom: 20px;
+  font-family: "SF Pro", sans-serif;
+}
+
+/* Ensure the rest of your root and media query variables remain the same */
+/* Sentence */
+.sentence {
+  font-size: clamp(20px, 3.8vw, 28px);
+  margin: 18px 0;
+  word-break: break-word;
+  text-align: center;
+}
+
+@media (min-width: 700px) {
+  .sentence {
+    font-size: 22px;
+  }
+}
+
+/* Highlighted pivot in sentence */
+.sentence b {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Unified Explanation */
+.explanation {
+  text-align: center;
+  font-size: clamp(17px, 3.0vw, 19px);
+  color: var(--soft);
+  margin-top: 16px;
+}
+
+/* Divider */
+hr {
+  border: none;
+  height: 1px;
+  background: var(--line);
+  margin: 24px 0;
+}
+
+.notes {
+  margin-top: 20px;
+  font-size: clamp(13px, 2.8vw, 16px);
+  color: var(--note);
+  text-align: center;
+  opacity: 0.95;
+}
+
+/* Links */
+a {
+  color: inherit; /* Prevents default blue link coloring from messing with formatting */
+  text-decoration: none;
+}
+
+.targetLink,
+.targetLink:visited,
+.targetLink:hover,
+.targetLink:active {
+  color: inherit;
+  text-decoration: none;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.targetLink {
+  display: inline-block;
+}
+
+.targetLink:focus {
+  outline: none;
+}
+
+.sentenceLink,
+.sentenceLink:visited,
+.sentenceLink:hover,
+.sentenceLink:active {
+  color: inherit;
+  text-decoration: none;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sentenceLink {
+  display: inline;
+}
+
+.sentenceLink:focus {
+  outline: none;
+}
+
+/* --- added: provenance + tags ------------------------------------------- */
+/* Provenance — small, muted, unobtrusive */
+.source {
+  margin-top: 18px;
+  text-align: center;
+  font-size: clamp(11px, 2.2vw, 13px);
+  color: var(--label);
+  letter-spacing: 0.02em;
+}
+
+/* All tags, shown discreetly at the very bottom */
+.tags {
+  margin-top: 10px;
+  text-align: center;
+  font-size: clamp(10px, 2vw, 12px);
+  color: var(--label);
+  opacity: 0.7;
+  word-spacing: 0.4em;
+}

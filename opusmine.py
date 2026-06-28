@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""opusmine — resolve capture lines into structured records for opuscards.
+
+Reads capture lines (stdin, or --file), parses the line grammar, and for each line
+either MINES a sentence from the corpus index or PASSES THROUGH a literal sentence.
+
+Emits TSV (one row per card):
+    note_type <TAB> target <TAB> sentence <TAB> source <TAB> instruction
+
+Line grammar (a trailing  #instruction  is stripped first and passed to the model):
+    word                  vocab card; mine a sentence for `word`
+    word <TAB> anchor     vocab card; mine the shortest line containing `word` AND `anchor`
+    word <TAB> <sentence> vocab card; literal sentence, explicit target (no mining)
+    <sentence>            vocab card; literal sentence, model picks the target
+    >...                  any of the above, but a SENTENCE card (front = sentence)
+    (no corpus hit)       context-less: empty sentence (e.g. a Pleco shortlist word)
+
+Charset: trad+simp variants are generated for the QUERY only (the cheap side); the
+index keeps its original charset, so a card comes out in the charset of its source.
+Trimming is length-gated and happens here, at retrieval, where the target is known.
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+CORPUS = HOME / "Chinese Text Analysis"
+INDEX = CORPUS / "_index"
+# Game dumps stay AS-IS (they already ship both charsets). Mapped to display names
+# because there's no quest-level granularity yet; upgrade the values here later.
+DUMPS = {
+    HOME / "src" / "AnimeGameData": "Genshin",
+    HOME / "src" / "TurnBasedGameData": "Honkai: Star Rail",
+}
+
+SENT_PUNCT = "。！？!?…；;"   # characters that end a sentence (used for both detection and trimming)
+
+# A capture token is treated as a LITERAL SENTENCE (passed through, not mined) if it
+# is at least this many characters OR contains sentence punctuation. Below it, a bare
+# token is a word to mine, and a post-TAB token is a disambiguating anchor. Lower this
+# if you capture very short standalone sentences; raise it if you mine long words.
+SENTENCE_LIKE = 12
+
+# A mined line this short or shorter is returned WHOLE, never trimmed. Keeps multi-clause
+# short lines intact (别碰那个！很危险！ stays whole for a 危险 card). Your stated 30–40 range.
+KEEP_WHOLE = 40
+
+# After trimming a long line to the target's sentence, if that sentence is shorter than
+# this, the previous sentence is prepended for context. Stops a bare 很危险！ losing its setup.
+TINY = 12
+
+
+def variants(text: str) -> list[str]:
+    """Original + simplified + traditional. Degrades to [text] if opencc is unavailable,
+    so a broken/missing opencc just means same-charset matching rather than a crash."""
+    out = [text]
+    for cfg in ("t2s.json", "s2t.json"):
+        try:
+            r = subprocess.run(["opencc", "-c", cfg], input=text, text=True,
+                               capture_output=True, check=True)
+            v = r.stdout.strip()
+            if v and v not in out:
+                out.append(v)
+        except Exception:
+            pass
+    return out
+
+
+def split_sentences(text: str) -> list[str]:
+    parts, buf = [], ""
+    for ch in text:
+        buf += ch
+        if ch in SENT_PUNCT:
+            parts.append(buf)
+            buf = ""
+    if buf:
+        parts.append(buf)
+    return [p for p in (s.strip() for s in parts) if p]
+
+
+def trim(line: str, targets: list[str]) -> str:
+    if len(line) <= KEEP_WHOLE:
+        return line
+    parts = split_sentences(line)
+    idxs = [i for i, p in enumerate(parts) if any(t in p for t in targets)]
+    if not idxs:
+        return line
+    i = idxs[0]
+    chunk = parts[i]
+    if len(chunk) < TINY and i > 0:
+        chunk = parts[i - 1] + chunk
+    return chunk
+
+
+def rg(targets: list[str], paths: list[Path]) -> list[str]:
+    cmd = ["rg", "--fixed-strings", "--with-filename", "--no-heading", "-N",
+           "-g", "!old/", "-g", "!Anki_dump/"]
+    for t in targets:
+        cmd += ["-e", t]
+    cmd += [str(p) for p in paths]
+    r = subprocess.run(cmd, text=True, capture_output=True)
+    if r.returncode not in (0, 1):
+        print(r.stderr, file=sys.stderr, end="")
+        return []
+    return r.stdout.splitlines()
+
+
+def source_for(path_str: str) -> str:
+    p = Path(path_str)
+    if INDEX in p.parents:
+        return p.stem
+    for root, name in DUMPS.items():
+        if root in p.parents:
+            return name
+    return ""
+
+
+def mine(target: str, anchor: str, deep: bool) -> tuple[str, str]:
+    tvars = variants(target)
+    avars = variants(anchor) if anchor else None
+    # index first, then dumps as a fallback; --deep searches both at once
+    searches = [[INDEX, *DUMPS.keys()]] if deep else [[INDEX], list(DUMPS.keys())]
+    for paths in searches:
+        paths = [p for p in paths if p.exists()]
+        if not paths:
+            continue
+        candidates = []
+        for hit in rg(tvars, paths):
+            path_str, _, text = hit.partition(":")
+            text = text.strip()
+            if not text:
+                continue
+            if avars and not any(a in text for a in avars):
+                continue
+            sent = trim(text, tvars)
+            candidates.append((len(sent), sent, source_for(path_str)))
+        if candidates:
+            candidates.sort(key=lambda c: c[0])   # shortest trimmed sentence wins
+            _, sent, src = candidates[0]
+            return sent, src
+    return "", ""   # context-less
+
+
+def is_sentence_like(s: str) -> bool:
+    return len(s) >= SENTENCE_LIKE or any(c in s for c in SENT_PUNCT)
+
+
+def parse_line(raw: str):
+    body, sep, comment = raw.partition("#")
+    instruction = comment.strip() if sep else ""
+    body = body.strip()
+    if not body:
+        return None
+
+    note_type = "vocab"
+    if body.startswith(">"):
+        note_type = "sentence"
+        body = body[1:].strip()
+
+    target = sentence = anchor = ""
+    if "\t" in body:
+        left, right = body.split("\t", 1)
+        target = left.strip()
+        right = right.strip()
+        if is_sentence_like(right):
+            sentence = right        # literal passthrough, explicit target
+        else:
+            anchor = right          # disambiguated mining
+    elif is_sentence_like(body):
+        sentence = body             # literal passthrough, model picks target
+    else:
+        target = body               # bare word -> mine
+
+    return note_type, target, sentence, anchor, instruction
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        prog="opusmine",
+        description="Resolve capture lines into  note_type<TAB>target<TAB>sentence<TAB>source<TAB>instruction  records.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "capture grammar (a trailing  #instruction  is stripped and passed to the model):\n"
+            "  word                  vocab card; mine a sentence for `word`\n"
+            "  word <TAB> anchor     vocab card; mine the shortest line with `word` AND `anchor`\n"
+            "  word <TAB> sentence   vocab card; use that literal sentence (explicit target)\n"
+            "  sentence              vocab card; literal sentence, model picks the target\n"
+            "  >...                  any of the above as a SENTENCE card (front = sentence)\n"
+            "  (no corpus hit)       context-less: empty sentence (e.g. a Pleco shortlist word)\n\n"
+            "examples:\n"
+            "  pbpaste | opusmine.py | opuscards.py --anki\n"
+            "  opusmine.py --file ~/keep.txt -d | opuscards.py\n"
+        ),
+    )
+    ap.add_argument("--file", type=Path, help="read captures from a file instead of stdin")
+    ap.add_argument("-d", "--deep", action="store_true",
+                    help="search the game dumps alongside the index (default: index first, dumps only on a miss)")
+    args = ap.parse_args()
+
+    lines = args.file.read_text(encoding="utf-8").splitlines() if args.file else sys.stdin
+    for raw in lines:
+        parsed = parse_line(raw.rstrip("\n"))
+        if not parsed:
+            continue
+        note_type, target, sentence, anchor, instruction = parsed
+        source = ""
+        if not sentence and target:            # nothing literal given -> mine
+            sentence, source = mine(target, anchor, args.deep)
+        print("\t".join([note_type, target, sentence, source, instruction]))
+
+
+if __name__ == "__main__":
+    main()

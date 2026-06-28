@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# opus — one-touch capture -> Chinese Nova / Chinese Sentences cards
+#
+# Usage:
+#   opus                      # read captures from the clipboard (pbpaste)
+#   opus --file ~/keep.txt    # read from a synced plaintext inbox instead
+#   opus -d                   # also search the game dumps when mining
+#
+# Any flags other than --file are passed straight through to opusmine.
+# Suggested alias:  alias om='opus'
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SRC_CMD=(pbpaste)
+MINE_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --file) SRC_CMD=(cat "$2"); shift 2 ;;
+    *)      MINE_ARGS+=("$1"); shift ;;
+  esac
+done
+
+"${SRC_CMD[@]}" \
+  | uv run "$DIR/opusmine.py" "${MINE_ARGS[@]}" \
+  | uv run "$DIR/opuscards.py" --anki
