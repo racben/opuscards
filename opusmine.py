@@ -58,6 +58,11 @@ TINY = 12
 # the cap is applied AFTER anchor-filtering so a disambiguating anchor is never truncated.
 MAX_HITS = 20
 
+# rg skips files larger than this. The curated index is tiny, so this only affects the
+# game-dump fallback: it stops a stray huge file from making a fallback crawl drag. Raise
+# it if a legitimately large source ever gets silently skipped.
+MAX_FILESIZE = "50M"
+
 
 def variants(text: str) -> list[str]:
     """Original + simplified + traditional. Degrades to [text] if opencc is unavailable,
@@ -103,6 +108,7 @@ def trim(line: str, targets: list[str]) -> str:
 
 def rg(targets: list[str], paths: list[Path]) -> list[str]:
     cmd = ["rg", "--fixed-strings", "--with-filename", "--no-heading", "-N",
+           "--max-filesize", MAX_FILESIZE,
            "-g", "!old/", "-g", "!Anki_dump/"]
     for t in targets:
         cmd += ["-e", t]
@@ -124,11 +130,17 @@ def source_for(path_str: str) -> str:
     return ""
 
 
-def mine(target: str, anchor: str, deep: bool) -> tuple[str, str]:
+def mine(target: str, anchor: str, deep: bool, use_dumps: bool = True) -> tuple[str, str]:
     tvars = variants(target)
     avars = variants(anchor) if anchor else None
-    # index first, then dumps as a fallback; --deep searches both at once
-    searches = [[INDEX, *DUMPS.keys()]] if deep else [[INDEX], list(DUMPS.keys())]
+    # index first, then dumps as a fallback; --deep searches both at once;
+    # --no-dump (use_dumps=False) searches the index only and never crawls the dumps.
+    if not use_dumps:
+        searches = [[INDEX]]
+    elif deep:
+        searches = [[INDEX, *DUMPS.keys()]]
+    else:
+        searches = [[INDEX], list(DUMPS.keys())]
     for paths in searches:
         paths = [p for p in paths if p.exists()]
         if not paths:
@@ -207,8 +219,11 @@ def main() -> None:
     ap.add_argument("--file", type=Path, help="read captures from a file instead of stdin")
     ap.add_argument("-d", "--deep", action="store_true",
                     help="search the game dumps alongside the index (default: index first, dumps only on a miss)")
+    ap.add_argument("--no-dump", action="store_true",
+                    help="index only; never crawl the game dumps (fast for known-sourceless batches, e.g. Pleco)")
     args = ap.parse_args()
 
+    use_dumps = not args.no_dump
     lines = args.file.read_text(encoding="utf-8").splitlines() if args.file else sys.stdin
     for raw in lines:
         parsed = parse_line(raw.rstrip("\n"))
@@ -217,7 +232,7 @@ def main() -> None:
         note_type, target, sentence, anchor, instruction = parsed
         source = ""
         if not sentence and target:            # nothing literal given -> mine
-            sentence, source = mine(target, anchor, args.deep)
+            sentence, source = mine(target, anchor, args.deep, use_dumps)
         print("\t".join([note_type, target, sentence, source, instruction]))
 
 
