@@ -28,8 +28,9 @@ import sys
 from pathlib import Path
 
 HOME = Path.home()
+SCRIPT_DIR = Path(__file__).resolve().parent
 CORPUS = HOME / "Chinese Text Analysis"
-INDEX = CORPUS / "_index"
+INDEX = SCRIPT_DIR / "_index"
 # Game dumps stay AS-IS (they already ship both charsets). Mapped to display names
 # because there's no quest-level granularity yet; upgrade the values here later.
 DUMPS = {
