@@ -43,13 +43,19 @@ INDEX_DIRNAME = "_index"                         # the index directory's name
 INDEX_DIR = Path(__file__).resolve().parent / INDEX_DIRNAME   # ...and it lives beside the scripts
 TEXT_SUFFIXES = {".txt", ".md"}                  # which files in the corpus get indexed
 
-# Directories (matched by NAME, anywhere in a path) that build/add pretend don't exist.
-# This is the junk-drawer switch: dump old/raw/unwanted text into a folder named here
-# and the index stays clean without any command-line flags. Edit freely.
+# Directories that build/add pretend don't exist. Each entry is either a single folder
+# NAME (matched anywhere in a path, e.g. "old") or a relative PATH of consecutive folders
+# (e.g. "hsr/Quest_Dialogues", matched as a run of components — so it won't catch some
+# other stray "Quest_Dialogues"). This is the junk-drawer switch: dump unwanted text in a
+# folder named here and the index stays clean without any command-line flags. Edit freely.
 IGNORE_DIRS = {
     INDEX_DIRNAME,        # never re-index the index itself
     "old",
     "Anki_dump",
+    "hsr/Quest_Dialogues",
+    "current",
+    "genshin/world_quest_corpus",
+    "Scripts",
     # add your own cruft folders, e.g.:
     # "raw_dumps", "scratch", "hsr_dump", "_attic",
 }
@@ -121,12 +127,28 @@ def write_index(path: Path, index_dir: Path, taken: dict[str, Path]) -> tuple[Pa
     return dest, len(lines)
 
 
+def _segments(entry: str) -> tuple[str, ...]:
+    """An ignore entry as path components: 'Scripts' -> ('Scripts',),
+    'hsr/Quest_Dialogues' -> ('hsr', 'Quest_Dialogues')."""
+    return tuple(s for s in entry.replace("\\", "/").strip("/").split("/") if s)
+
+
 def _ignored(f: Path, index_dir: Path, excludes: list[str]) -> bool:
     if index_dir in f.parents:
         return True
-    if IGNORE_DIRS.intersection(f.parts):          # any path component is an ignored dir name
-        return True
-    return any(ex in str(f) for ex in excludes)     # ad-hoc substring excludes
+    parts = f.parts
+    for entry in IGNORE_DIRS:
+        segs = _segments(entry)
+        if not segs:
+            continue
+        if len(segs) == 1:
+            if segs[0] in parts:                       # a single folder name, anywhere in the path
+                return True
+        else:
+            n = len(segs)                              # a path like a/b: match consecutive components
+            if any(parts[i:i + n] == segs for i in range(len(parts) - n + 1)):
+                return True
+    return any(ex in str(f) for ex in excludes)         # ad-hoc substring excludes
 
 
 def iter_corpus_files(inputs: list[str], index_dir: Path, excludes: list[str]) -> list[Path]:
@@ -162,6 +184,13 @@ def collect_text_files(items: list[str]) -> list[Path]:
 def cmd_build(args: argparse.Namespace) -> int:
     index_dir = args.out or INDEX_DIR
     index_dir.mkdir(parents=True, exist_ok=True)
+    if getattr(args, "clean", False):                  # clear stale sources before rebuilding
+        removed = 0
+        for old in index_dir.glob("*.txt"):
+            old.unlink()
+            removed += 1
+        if removed:
+            print(f"cleaned {removed} existing index files")
     inputs = args.paths or [str(args.corpus)]
     excludes = getattr(args, "exclude", []) or []
     taken: dict[str, Path] = {}
@@ -269,6 +298,8 @@ def main() -> int:
     p_build.add_argument("--out", type=Path, default=None, help="index dir (default: _index beside the scripts)")
     p_build.add_argument("--exclude", action="append", default=[], metavar="STR",
                          help="skip any path containing STR (repeatable), e.g. --exclude TurnBased")
+    p_build.add_argument("--clean", action="store_true",
+                         help="delete existing *.txt in the index dir first (clears stale/removed sources)")
     add_corpus_opt(p_build)
     p_build.set_defaults(func=cmd_build)
 
