@@ -23,6 +23,7 @@ Trimming is length-gated and happens here, at retrieval, where the target is kno
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -106,6 +107,24 @@ def trim(line: str, targets: list[str]) -> str:
     return chunk
 
 
+# Dump hits are grepped RAW (they never pass through corpus.py's cleaner), so strip the
+# structural noise that JSON game-exports carry. This is deliberately minimal — a leading
+# "<id>": " wrapper, a trailing ",  and inline tags/ids. Anything beyond this is corpus
+# maintenance, not opusmine's job.
+_JSON_KEY = re.compile(r'^\s*"[^"]*"\s*:\s*"')   # leading  "12132432020536924126": "
+_JSON_TAIL = re.compile(r'"\s*,?\s*$')           # trailing  ",
+_LEAD_ID = re.compile(r"^\[.*?\]\s*")            # leading [146782006]
+_TAG = re.compile(r"<[^>]+>")                    # <color=#...> </color>
+
+
+def clean_hit(text: str) -> str:
+    text = _JSON_KEY.sub("", text)
+    text = _JSON_TAIL.sub("", text)
+    text = _LEAD_ID.sub("", text)
+    text = _TAG.sub("", text)
+    return text.strip()
+
+
 def rg(targets: list[str], paths: list[Path]) -> list[str]:
     cmd = ["rg", "--fixed-strings", "--with-filename", "--no-heading", "-N",
            "--max-filesize", MAX_FILESIZE,
@@ -148,7 +167,7 @@ def mine(target: str, anchor: str, deep: bool, use_dumps: bool = True) -> tuple[
         candidates = []
         for hit in rg(tvars, paths):
             path_str, _, text = hit.partition(":")
-            text = text.strip()
+            text = clean_hit(text)              # strip dump JSON-wrapping / tags / ids
             if not text:
                 continue
             if avars and not any(a in text for a in avars):

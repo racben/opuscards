@@ -56,6 +56,7 @@ IGNORE_DIRS = {
     "current",
     "genshin/world_quest_corpus",
     "Scripts",
+    "nontext",
     # add your own cruft folders, e.g.:
     # "raw_dumps", "scratch", "hsr_dump", "_attic",
 }
