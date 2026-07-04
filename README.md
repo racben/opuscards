@@ -114,8 +114,9 @@ dropping most of a GBK/Big5 file's characters.
 
 - `opusmine.py`: `SENTENCE_LIKE` (capture word-vs-sentence cutoff), `KEEP_WHOLE`
   (max length kept un-trimmed), `TINY` (pull-in-neighbour threshold), `DUMPS`
-  (game-dump paths → display names used for `Source`). Mined hits are ranked
-  shortest-first; drop the `candidates.sort` for first-match-wins.
+  (game-dump paths → display names used for `Source`). Mined hits shorter than the
+  target + `MIN_MARGIN` are discarded as titles/menu entries; the rest are ranked
+  punctuated-first, then by closeness to `IDEAL_LEN`.
 - `opuscards.py`: `NOTE_TYPES`, `BASE_TAGS`, `--deck`, `--model`. `NO_COLOR=1`
   disables ANSI colour.
 - `corpus.py`: cleaning regexes at the top, each commented. The one load-bearing

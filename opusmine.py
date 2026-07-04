@@ -55,10 +55,19 @@ KEEP_WHOLE = 40
 # this, the previous sentence is prepended for context. Stops a bare 很危险！ losing its setup.
 TINY = 12
 
-# Stop collecting after this many matching candidates, then pick the shortest of them.
-# Bounds the work when a frequent word (esp. with a weak anchor) matches a lot of lines;
-# the cap is applied AFTER anchor-filtering so a disambiguating anchor is never truncated.
-MAX_HITS = 20
+# Stop collecting after this many usable candidates, then rank them. Bounds the work
+# when a frequent word (esp. with a weak anchor) matches a lot of lines; the cap is
+# applied AFTER anchor- and degenerate-filtering, so junk hits never crowd out real ones.
+MAX_HITS = 50
+
+# A mined line must beat the target's own length by this margin, or it's discarded as a
+# menu entry / item name / title rather than a sentence (a corpus line that IS the word
+# would otherwise always win any shortest-style ranking).
+MIN_MARGIN = 3
+
+# Among usable candidates, prefer punctuated lines (titles rarely carry 。！？), then the
+# length closest to this — compact enough to review, long enough to carry real context.
+IDEAL_LEN = 20
 
 # rg skips files larger than this. The curated index is tiny, so this only affects the
 # game-dump fallback: it stops a stray huge file from making a fallback crawl drag. Raise
@@ -171,13 +180,15 @@ def mine(target: str, anchor: str, dumps: bool) -> tuple[str, str]:
             if avars and not any(a in text for a in avars):
                 continue
             sent = trim(text, tvars)
-            candidates.append((len(sent), sent, source_for(path_str)))
-            if len(candidates) >= MAX_HITS:        # enough to pick a good short one from
+            if len(sent) < len(target) + MIN_MARGIN:   # title/menu line, not a sentence
+                continue
+            no_punct = not any(c in sent for c in SENT_PUNCT)
+            candidates.append((no_punct, abs(len(sent) - IDEAL_LEN), sent, source_for(path_str)))
+            if len(candidates) >= MAX_HITS:        # enough to pick a good one from
                 break
         if candidates:
-            candidates.sort(key=lambda c: c[0])   # shortest trimmed sentence wins
-            _, sent, src = candidates[0]
-            return sent, src
+            candidates.sort(key=lambda c: (c[0], c[1]))   # punctuated first, then nearest IDEAL_LEN
+            return candidates[0][2], candidates[0][3]
     return "", ""   # context-less
 
 
