@@ -9,7 +9,9 @@
 # Any flags other than --file are passed straight through to opusmine.
 # Suggested alias:  alias om='opus'
 set -euo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve through symlinks (e.g. ~/bin/opus -> this repo) so the scripts,
+# prompt, and _index are found next to the REAL file, wherever it's invoked from.
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
 SRC_CMD=(pbpaste)
 MINE_ARGS=()
