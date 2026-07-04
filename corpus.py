@@ -206,7 +206,9 @@ def iter_corpus_files(inputs: list[str], index_dir: Path, excludes: list[str]) -
     for item in inputs:
         p = Path(item).expanduser()
         if p.is_dir():
-            for f in sorted(p.rglob("*")):
+            # recurse_symlinks: corpus dirs may be symlinks to trees kept outside
+            # cloud sync (e.g. ~/Archive); without it rglob silently skips them
+            for f in sorted(p.rglob("*", recurse_symlinks=True)):
                 if f.is_file() and f.suffix in TEXT_SUFFIXES and not _ignored(f, index_dir, excludes):
                     files.append(f)
         elif p.is_file():
@@ -223,7 +225,8 @@ def collect_text_files(items: list[str]) -> list[Path]:
     for item in items:
         p = Path(item).expanduser()
         if p.is_dir():
-            out += [f for f in sorted(p.rglob("*")) if f.is_file() and f.suffix in TEXT_SUFFIXES]
+            out += [f for f in sorted(p.rglob("*", recurse_symlinks=True))
+                    if f.is_file() and f.suffix in TEXT_SUFFIXES]
         elif p.is_file():
             out.append(p)
         else:
