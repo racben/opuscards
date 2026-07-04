@@ -26,11 +26,12 @@ capture (Keep / clipboard)
 1. **Anki**: install the AnkiConnect add-on; keep Anki open when adding cards.
 2. **Note types**:
    - Create **`Chinese Nova`** (vocab, word-front) with fields
-     `Expression · Reading · Sentence · Definition · Notes · Source · Hint`.
+     `Expression · Reading · Register · Sentence · Definition · Notes · Source · Hint`.
      Paste in `front.html`, `back.html`, `styling.css`.
    - **`Chinese Sentences`** (sentence-front) already exists; it needs
      `Sentence · Expression · Reading · Definition · Notes` and optionally `Source`.
-     No `Hint` needed — the script skips fields a note type doesn't have.
+     No `Hint` needed — the script skips fields a note type doesn't have, and folds
+     `Register` into the Definition as `〈…〉` when the field is missing.
 3. **Env**: `export OPENAI_API_KEY=...` (optionally `OPENAI_MODEL`, default `gpt-5.5`).
 4. **Index**: `python3 corpus.py build` normalises `~/Chinese Text Analysis` into a
    `_index/` folder **beside the scripts** (kept out of the corpus so cloud-sync clients
@@ -60,8 +61,8 @@ so clipboard is the path; if you ever capture into something that syncs a `.txt`
 ## Capture grammar
 
 One line per card. The target/anchor split is on the **first space or Tab** (so phone
-capture with spaces is fine). A trailing `#…` becomes a model instruction (never shown
-on the card).
+capture with spaces is fine). A trailing ` #…` — hash at line start or after a space —
+becomes a model instruction (never shown on the card); an inline `x#y` is left alone.
 
 | you type | result |
 |---|---|

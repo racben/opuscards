@@ -7,7 +7,8 @@ either MINES a sentence from the corpus index or PASSES THROUGH a literal senten
 Emits TSV (one row per card):
     note_type <TAB> target <TAB> sentence <TAB> source <TAB> instruction
 
-Line grammar (a trailing  #instruction  is stripped first and passed to the model):
+Line grammar (a trailing  " #instruction" — hash at line start or after whitespace —
+is stripped first and passed to the model; an inline x#y is left alone):
     word                  vocab card; mine a sentence for `word`
     word <TAB> anchor     vocab card; mine the shortest line containing `word` AND `anchor`
     word <TAB> <sentence> vocab card; literal sentence, explicit target (no mining)
@@ -197,9 +198,14 @@ def is_sentence_like(s: str) -> bool:
 
 
 def parse_line(raw: str):
-    body, sep, comment = raw.partition("#")
-    instruction = comment.strip() if sep else ""
-    body = body.strip()
+    # An instruction starts at a "#" that opens the line or follows whitespace, so an
+    # inline x#y (a URL fragment, a tag-like token inside a sentence) is left alone
+    # instead of truncating the capture.
+    m = re.search(r"(?:^|\s)#", raw)
+    if m:
+        body, instruction = raw[:m.start()].strip(), raw[m.end():].strip()
+    else:
+        body, instruction = raw.strip(), ""
     if not body:
         return None
 
@@ -231,8 +237,8 @@ def main() -> None:
         description="Resolve capture lines into  note_type<TAB>target<TAB>sentence<TAB>source<TAB>instruction  records.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "capture grammar (a trailing  #instruction  is stripped and passed to the model;\n"
-            " the target/anchor split is on the first space OR tab):\n"
+            "capture grammar (a trailing  ' #instruction' — hash after whitespace — is stripped\n"
+            " and passed to the model; the target/anchor split is on the first space OR tab):\n"
             "  word                  vocab card; mine a sentence for `word`\n"
             "  word anchor           vocab card; mine the shortest line with `word` AND `anchor`\n"
             "  word a sentence。      vocab card; use that literal sentence (explicit target)\n"

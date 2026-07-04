@@ -81,22 +81,28 @@ def build_note(deck: str, model_name: str, fields: dict, tags: list[str]) -> dic
 
 
 # --- generation --------------------------------------------------------------
+# Enforced server-side (structured outputs), so the response is guaranteed to be
+# exactly this JSON object — no fence-stripping or brace-hunting needed.
+CARD_SCHEMA = {
+    "type": "object",
+    "properties": {k: {"type": "string"}
+                   for k in ("expression", "reading", "register", "definition", "notes")},
+    "required": ["expression", "reading", "register", "definition", "notes"],
+    "additionalProperties": False,
+}
+
+
 def generate(client, model: str, system_prompt: str, sentence: str, target: str, instruction: str):
     prompt = f"Input:\n{sentence}\n\nTarget:\n{target}\n\nCustom instruction:\n{instruction}"
     resp = client.responses.create(
-        model=model, instructions=system_prompt, input=prompt, text={"verbosity": "low"}
+        model=model, instructions=system_prompt, input=prompt,
+        text={"verbosity": "low",
+              "format": {"type": "json_schema", "name": "card_fields",
+                         "schema": CARD_SCHEMA, "strict": True}},
     )
-    raw = (resp.output_text or "").strip()
-    if raw.startswith("```"):                      # defensive: unwrap a stray code fence
-        raw = raw.strip("`")
-    if "{" in raw and "}" in raw:                  # tolerate leading/trailing chatter
-        raw = raw[raw.find("{"): raw.rfind("}") + 1]
-    data = json.loads(raw)
-    return (str(data.get("expression", "")).strip(),
-            str(data.get("reading", "")).strip(),
-            str(data.get("register", "")).strip(),
-            str(data.get("definition", "")).strip(),
-            str(data.get("notes", "")).strip())
+    data = json.loads(resp.output_text)
+    return (data["expression"].strip(), data["reading"].strip(), data["register"].strip(),
+            data["definition"].strip(), data["notes"].strip())
 
 
 # --- pretty CLI --------------------------------------------------------------
