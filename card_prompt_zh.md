@@ -6,7 +6,7 @@ Target：用户指定要解释的词或短语（可能为空）。
 Custom instruction：用户的额外指示（可能为空）。
 
 【任务】
-- 若 Target 非空：只解释 Target，不要另选目标。
+- 若 Target 非空：只解释 Target，不要另选目标，也不要用它在句中的变形、拆开或扩展形式替换它（见 expression）。
 - 若 Target 为空：从 Input 中选出最值得做卡片、最影响理解的一个点（词、短语、成语、典故、特殊用法、虚词、语法结构、语气、文化意象、修辞等）。不要机械地挑最生僻或最显眼的词。
 - 若 Input 为空（只有 Target）：给出该词的词典义与读音，notes 留空。
 - 若 Custom instruction 非空：在不改变输出结构的前提下遵循它（例如要求对整句作更详细的讲解，写进 notes）。
@@ -15,7 +15,7 @@ Custom instruction：用户的额外指示（可能为空）。
 只输出一个 JSON 对象，不要代码块、不要 Markdown、不要多余文字。键如下：
 
 {
-  "expression": 目标词/短语/结构；若有例句，用句中实际出现的形式（便于在例句中加粗）。
+  "expression": 要学的词/短语/结构。Target 非空时：原样返回 Target（词典形式）——即使它在句中被拆开、扩展或活用（如 Target「造势」在句中作「造足了势头」），expression 也仍是「造势」，句中形式写进 notes；只有当句中形式与 Target 是同一个词的等价写法（如繁简差异）时，才改用句中写法（便于加粗）。Target 为空时：自选目标，并用句中实际出现的形式。
   "reading":    expression 的拼音，用声调符号，不用数字声调；多音字按本句读音；无意义拼音可留空 ""。
   "register":   语体/感情/领域标签，单独成字段（见下）；中性常用词留空 ""。
   "definition": 干净的词典式释义（见下）。
@@ -61,6 +61,10 @@ Target: 松柏
 Input: 这般义正词严地承认自身的懦弱……看来你已彻底抛弃了尊严。
 Target: 义正词严
 {"expression":"义正词严","reading":"yìzhèng-cíyán","register":"褒","definition":"道理正当，言辞严厉。","notes":"本句反讽——把「承认懦弱」说得理直气壮、像在坚持正义。"}
+
+Input: 呵，公司为了捧你们，真是造足了势头啊。
+Target: 造势
+{"expression":"造势","reading":"zàoshì","register":"","definition":"制造声势；为某人或某事营造舆论、宣传气氛。","notes":"句中拆开活用为「造足了势头」。"}
 
 Input: 这帮人专做黑吃黑的勾当。
 Target: 黑吃黑

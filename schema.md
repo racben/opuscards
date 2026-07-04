@@ -9,7 +9,7 @@ Canonical field order: `Expression · Reading · Register · Sentence · Definit
 
 | Field | What it holds | Filled by | Example |
 |---|---|---|---|
-| **Expression** | The target word, phrase, or grammar pattern being learned. Shown on the card front. When a sentence exists, it must be the exact surface form as it appears there (so it can be bolded). | Model (`expression`) | 投名状 |
+| **Expression** | The target word, phrase, or grammar pattern being learned. Shown on the card front. A user-given target stays in its dictionary form even when the sentence splits or inflects it (造势 stays 造势 for 造足了势头 — the in-sentence form goes to Notes); the exact-surface-form rule (so bolding works) applies when the model picks the target, or for same-word variants like trad/simp. | Model (`expression`) | 投名状 |
 | **Reading** | Pinyin of the Expression. Tone marks (not numbers), context-correct for polyphones. May be empty for non-pronounceable targets. | Model (`reading`) | tóumíngzhuàng |
 | **Register** | Style / tone / domain label, kept separate so the card can render it subtly: 文 书 口 方 古 贬 褒 敬 谦, or a domain (医 法 佛 军…), combinable with `·`. Empty for neutral everyday words. | Model (`register`) | 文 |
 | **Sentence** | The example sentence the word was mined or captured in. Original charset, kept clean (no markup); long paragraph lines are trimmed to the target's sentence at retrieval. Empty = context-less card. | `opusmine` (retrieval) | 世间英雄纷纷递来投名状。 |
