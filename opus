@@ -1,27 +1,56 @@
 #!/usr/bin/env bash
-# opus — one-touch capture -> Chinese Nova / Chinese Sentences cards
+# opus — one front door for the whole card pipeline, git-style verbs.
 #
-# Usage:
-#   opus                      # read captures from the clipboard (pbpaste)
-#   opus --file ~/keep.txt    # read from a synced plaintext inbox instead
-#   opus -d                   # also grep the raw game dumps when the index misses
-#
-# Any flags other than --file are passed straight through to opusmine.
-# Suggested alias:  alias om='opus'
+# The bare command stays the daily path (clipboard -> cards); verbs route to the
+# other tools, which keep working standalone — this is only a dispatcher.
 set -euo pipefail
 # Resolve through symlinks (e.g. ~/bin/opus -> this repo) so the scripts,
 # prompt, and _index are found next to the REAL file, wherever it's invoked from.
 DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
+usage() {
+  cat <<'EOF'
+usage:
+  opus [flags]              clipboard captures -> cards in Anki   (the daily path)
+  opus --file FILE [flags]  ...from a plaintext inbox instead of the clipboard
+  opus mine  [flags]        captures -> TSV records only (preview; no API, no Anki)
+  opus cards [flags]        TSV on stdin -> cards (review-only; add --anki to file them)
+  opus add   FILE|DIR ...   copy into the corpus and index it   (corpus.py add; --merge ...)
+  opus build [PATH ...]     (re)build the index                 (corpus.py build; --clean ...)
+
+Unlisted flags on the bare/mine forms pass through to opusmine (-d etc.).
+Suggested alias:  alias om='opus'
+EOF
+}
+
+# Split "--file X" out of the args: captures come from that file instead of the
+# clipboard; everything else is handed to opusmine untouched.
 SRC_CMD=(pbpaste)
 MINE_ARGS=()
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --file) SRC_CMD=(cat "$2"); shift 2 ;;
-    *)      MINE_ARGS+=("$1"); shift ;;
-  esac
-done
+parse_source() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --file) SRC_CMD=(cat "$2"); shift 2 ;;
+      *)      MINE_ARGS+=("$1"); shift ;;
+    esac
+  done
+}
 
-"${SRC_CMD[@]}" \
-  | uv run "$DIR/opusmine.py" "${MINE_ARGS[@]}" \
-  | uv run "$DIR/opuscards.py" --anki
+case "${1-}" in
+  add|build)
+    sub="$1"; shift
+    exec python3 "$DIR/corpus.py" "$sub" "$@" ;;
+  mine)
+    shift; parse_source "$@"
+    "${SRC_CMD[@]}" | uv run "$DIR/opusmine.py" "${MINE_ARGS[@]}" ;;
+  cards)
+    shift
+    exec uv run "$DIR/opuscards.py" "$@" ;;
+  help|-h|--help)
+    usage ;;
+  *)
+    parse_source "$@"
+    "${SRC_CMD[@]}" \
+      | uv run "$DIR/opusmine.py" "${MINE_ARGS[@]}" \
+      | uv run "$DIR/opuscards.py" --anki ;;
+esac

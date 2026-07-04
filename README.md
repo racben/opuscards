@@ -19,7 +19,9 @@ capture (Keep / clipboard)
    corpus.py ────► builds the search index the miner reads (run when you add texts)
 ```
 
-`opus` is a one-touch wrapper over `opusmine | opuscards --anki`.
+`opus` is the front door: bare, it runs `opusmine | opuscards --anki` on the clipboard;
+git-style verbs (`mine`, `cards`, `add`, `build`) dispatch to the individual tools,
+which all keep working standalone.
 
 ## Setup (once)
 
@@ -44,14 +46,17 @@ capture (Keep / clipboard)
 ## Daily use
 
 ```bash
-# build / refresh the index after adding sources
-python3 corpus.py add ~/Downloads/newnovel.txt   # copy into corpus + index it
-python3 corpus.py build                           # rebuild everything
+# everything through one command
+opus                                 # clipboard captures -> cards in Anki
+opus --file ~/keep_inbox.txt         # …from a synced plaintext file instead
+opus mine                            # preview the mined TSV (no API, no Anki)
+opus add ~/Downloads/newnovel.txt    # copy into corpus + index it
+opus build                           # rebuild the whole index
+opus mine | opus cards               # long form of the pipeline, review-only
 
-# make cards
+# the scripts still work standalone:
 pbpaste | uv run opusmine.py | uv run opuscards.py --anki
-opus                                              # …same thing, from the clipboard
-opus --file ~/keep_inbox.txt                      # …from a synced plaintext file
+python3 corpus.py build
 ```
 
 Copy lines out of Google Keep and run `opus`. Keep has no clean local-file/API hook,
@@ -130,6 +135,6 @@ dropping most of a GBK/Big5 file's characters.
 | `opusmine.py` | capture → target/sentence/source resolver (mine or passthrough) |
 | `opuscards.py` | GPT generation + AnkiConnect, pretty CLI review |
 | `corpus.py` | `add` (ingest a file) / `build` (rebuild index) |
-| `opus` | one-touch clipboard/file → cards wrapper |
+| `opus` | front door: bare = clipboard → cards; verbs `mine · cards · add · build` dispatch |
 | `card_prompt_zh.md` | the generation prompt (JSON out); `OPUS_PROMPT` to relocate |
 | `front.html` `back.html` `styling.css` | the `Chinese Nova` card template |
