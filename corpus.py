@@ -91,7 +91,8 @@ def clean_line(line: str) -> str:
     line = html.unescape(line)
     line = ESC_RE.sub(r"\1", line)
     line = DOTS_RE.sub("\u2026", line)
-    line = line.replace("\u3000", " ").strip()   # full-width space -> normal, then trim
+    # full-width space -> normal; tabs flattened so the TSV pipe downstream can't shift columns
+    line = line.replace("\u3000", " ").replace("\t", " ").strip()
     return line
 
 
@@ -100,9 +101,19 @@ def keep(line: str) -> bool:
     return bool(line) and bool(CJK.search(line)) and not SPEAKER_ONLY_RE.match(line)
 
 
+def read_utf8(path: Path) -> str:
+    """Read a corpus file strictly as UTF-8. A GBK/Big5 file read with errors='ignore'
+    would silently lose most of its CJK, so refuse loudly instead."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        sys.exit(f"error: {path} is not valid UTF-8 ({e.reason} at byte {e.start}); "
+                 f"convert it first, e.g.: iconv -f GB18030 -t UTF-8 '{path.name}'")
+
+
 def normalize_file(path: Path) -> list[str]:
     """Clean a file into de-duped, index-ready lines (order preserved)."""
-    raw = path.read_text(encoding="utf-8", errors="ignore")
+    raw = read_utf8(path)
     seen: set[str] = set()
     out: list[str] = []
     for ln in raw.splitlines():
@@ -114,14 +125,52 @@ def normalize_file(path: Path) -> list[str]:
     return out
 
 
+MANIFEST_NAME = ".manifest.tsv"   # stem<TAB>resolved-source-path, one per line, inside the index dir
+
+
+def load_manifest(index_dir: Path) -> dict[str, Path]:
+    """The persisted stem->source map. Makes collision detection survive across runs,
+    so a later `add` can never silently overwrite an earlier source's index file."""
+    taken: dict[str, Path] = {}
+    mf = index_dir / MANIFEST_NAME
+    if mf.exists():
+        for ln in mf.read_text(encoding="utf-8").splitlines():
+            stem, _, src = ln.partition("\t")
+            if stem and src:
+                taken[stem] = Path(src)
+    return taken
+
+
+def save_manifest(index_dir: Path, taken: dict[str, Path]) -> None:
+    lines = [f"{stem}\t{src}" for stem, src in sorted(taken.items())]
+    (index_dir / MANIFEST_NAME).write_text("\n".join(lines) + "\n" if lines else "", encoding="utf-8")
+
+
+def _stem_free(stem: str, path: Path, index_dir: Path, taken: dict[str, Path]) -> bool:
+    """A stem is ours if the manifest maps it to this same source. Unmapped stems are
+    free only if no index file exists (protects pre-manifest indexes too)."""
+    reserved = taken.get(stem)
+    if reserved is not None:
+        return reserved == path
+    return not (index_dir / f"{stem}.txt").exists()
+
+
 def write_index(path: Path, index_dir: Path, taken: dict[str, Path]) -> tuple[Path, int] | None:
-    """Normalise `path` and write <index_dir>/<stem>.txt. Returns (dest, n_lines)."""
+    """Normalise `path` and write <index_dir>/<stem>.txt. Returns (dest, n_lines).
+    Re-indexing the same source overwrites its own file; a *different* source with a
+    colliding stem gets a disambiguated name instead — never an overwrite."""
     lines = normalize_file(path)
     if not lines:
         return None
+    path = path.resolve()
     stem = path.stem
-    if stem in taken and taken[stem] != path:          # different source, same stem
-        stem = f"{path.parent.name}_{stem}"
+    if not _stem_free(stem, path, index_dir, taken):
+        base = f"{path.parent.name}_{path.stem}"
+        stem, n = base, 2
+        while not _stem_free(stem, path, index_dir, taken):
+            stem = f"{base}_{n}"
+            n += 1
+        print(f"note: stem taken by another source; indexing {path.name} as {stem}.txt", file=sys.stderr)
     taken[stem] = path
     dest = index_dir / f"{stem}.txt"
     dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -185,21 +234,28 @@ def collect_text_files(items: list[str]) -> list[Path]:
 def cmd_build(args: argparse.Namespace) -> int:
     index_dir = args.out or INDEX_DIR
     index_dir.mkdir(parents=True, exist_ok=True)
-    if getattr(args, "clean", False):                  # clear stale sources before rebuilding
+    # A full rebuild (no paths) cleans by default so stale sources can't linger; a
+    # partial build keeps the rest of the index. --clean / --no-clean overrides either.
+    full_rebuild = not args.paths
+    clean = args.clean if getattr(args, "clean", None) is not None else full_rebuild
+    if clean:
         removed = 0
         for old in index_dir.glob("*.txt"):
             old.unlink()
             removed += 1
         if removed:
             print(f"cleaned {removed} existing index files")
+        taken: dict[str, Path] = {}
+    else:
+        taken = load_manifest(index_dir)
     inputs = args.paths or [str(args.corpus)]
     excludes = getattr(args, "exclude", []) or []
-    taken: dict[str, Path] = {}
     for f in iter_corpus_files(inputs, index_dir, excludes):
         res = write_index(f, index_dir, taken)
         if res:
             dest, n = res
             print(f"{f.name}: {n} lines -> {dest.name}")
+    save_manifest(index_dir, taken)
     return 0
 
 
@@ -207,7 +263,7 @@ def cmd_add(args: argparse.Namespace) -> int:
     args.corpus.mkdir(parents=True, exist_ok=True)
     index_dir = INDEX_DIR
     index_dir.mkdir(parents=True, exist_ok=True)
-    taken: dict[str, Path] = {}
+    taken = load_manifest(index_dir)
 
     # --merge: concatenate all inputs into ONE corpus file, then index as one source.
     # This stays consistent with `build`: the merged file is a normal corpus file, so a
@@ -222,7 +278,7 @@ def cmd_add(args: argparse.Namespace) -> int:
         if dest.exists() and not args.force:
             print(f"refusing to overwrite existing {dest.name} (use --force)", file=sys.stderr)
             return 1
-        blob = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in sources)
+        blob = "\n".join(read_utf8(p) for p in sources)
         dest.write_text(blob, encoding="utf-8")
         print(f"merged {len(sources)} files -> corpus/{dest.name}")
         res = write_index(dest, index_dir, taken)
@@ -231,6 +287,7 @@ def cmd_add(args: argparse.Namespace) -> int:
             print(f"  indexed: {n} lines -> {idest.name}")
         else:
             print("  (no indexable lines found)")
+        save_manifest(index_dir, taken)
         return 0
 
     rc = 0
@@ -261,6 +318,7 @@ def cmd_add(args: argparse.Namespace) -> int:
             print(f"  indexed: {n} lines -> {idest.name}")
         else:
             print("  (no indexable lines found)")
+    save_manifest(index_dir, taken)
     return rc
 
 
@@ -299,8 +357,9 @@ def main() -> int:
     p_build.add_argument("--out", type=Path, default=None, help="index dir (default: _index beside the scripts)")
     p_build.add_argument("--exclude", action="append", default=[], metavar="STR",
                          help="skip any path containing STR (repeatable), e.g. --exclude TurnBased")
-    p_build.add_argument("--clean", action="store_true",
-                         help="delete existing *.txt in the index dir first (clears stale/removed sources)")
+    p_build.add_argument("--clean", action=argparse.BooleanOptionalAction, default=None,
+                         help="delete existing *.txt in the index dir first "
+                              "(default: clean on a full rebuild, keep on a partial one)")
     add_corpus_opt(p_build)
     p_build.set_defaults(func=cmd_build)
 

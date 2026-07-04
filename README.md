@@ -82,10 +82,17 @@ The corpus can be a junk drawer. `corpus.py` ignores any folder whose name is in
 `IGNORE_DIRS` (top of the file) — drop old/raw/unwanted text in such a folder and the
 index never sees it. `build --exclude STR` is the ad-hoc version for one-offs.
 
-Game dumps (`AnimeGameData`, `TurnBasedGameData`) are meant to live *outside* the
-corpus, as the `DUMPS` fallback `opusmine` greps directly. If a dump has leaked into the
-corpus and exploded the index into thousands of files, either move it out and rebuild, or
-add its folder name to `IGNORE_DIRS`.
+Game dumps (`AnimeGameData`, `TurnBasedGameData`) live *outside* the corpus and are
+**opt-in**: `opus -d` greps them directly when the index misses; by default they are
+never touched (the curated genshin/hsr corpus files cover normal mining). If a dump has
+leaked into the corpus and exploded the index into thousands of files, either move it
+out and rebuild, or add its folder name to `IGNORE_DIRS`.
+
+A full `corpus.py build` (no paths) now cleans the index first by default, so removed or
+renamed sources can't linger as stale index files; `build <file>` stays incremental
+(`--clean` / `--no-clean` forces either). A `.manifest.tsv` inside `_index/` remembers
+which source owns each index filename, so a new source whose name collides with an old
+one gets a disambiguated filename instead of silently overwriting it.
 
 `corpus.py add <dir> --merge NAME` collapses a multi-file source (a game dump, a chapter
 folder) into a single `NAME.txt` corpus file indexed as one source. **If the merged
@@ -98,6 +105,10 @@ Captured text is searched as-found. The index keeps each source's **original**
 charset; trad/simp variants are generated for the **query** only, so a traditional
 source yields a traditional card. (Needs the `opencc` CLI; if it's missing, search
 quietly falls back to same-charset matching.)
+
+Corpus files must be **UTF-8** — `corpus.py` exits with an error on anything else
+(convert first, e.g. `iconv -f GB18030 -t UTF-8 file.txt`), rather than silently
+dropping most of a GBK/Big5 file's characters.
 
 ## Tunables
 

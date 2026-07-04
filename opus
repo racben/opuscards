@@ -4,7 +4,7 @@
 # Usage:
 #   opus                      # read captures from the clipboard (pbpaste)
 #   opus --file ~/keep.txt    # read from a synced plaintext inbox instead
-#   opus -d                   # also search the game dumps when mining
+#   opus -d                   # also grep the raw game dumps when the index misses
 #
 # Any flags other than --file are passed straight through to opusmine.
 # Suggested alias:  alias om='opus'
