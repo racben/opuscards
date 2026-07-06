@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
 # opus — one front door for the whole card pipeline, git-style verbs.
 #
-# The bare command stays the daily path (clipboard -> cards); verbs route to the
-# other tools, which keep working standalone — this is only a dispatcher.
+# Bare `opus` prints help; the daily paths are the vocab/sent verbs (alias whichever
+# you use most). Verbs route to the individual tools, which keep working standalone —
+# this is only a dispatcher.
 set -euo pipefail
 # Resolve through symlinks (e.g. ~/bin/opus -> this repo) so the scripts,
-# prompt, and _index are found next to the REAL file, wherever it's invoked from.
+# prompts, and _index are found next to the REAL file, wherever it's invoked from.
 DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
 usage() {
   cat <<'EOF'
 usage:
-  opus [flags]              clipboard captures -> cards in Anki   (the daily path)
-  opus --file FILE [flags]  ...from a plaintext inbox instead of the clipboard
+  opus vocab [flags]        clipboard captures -> vocab cards in Anki    (the daily path)
+  opus sent  [flags]        clipboard captures -> sentence cards in Anki
+  opus vocab|sent --file F  ...from a plaintext inbox instead of the clipboard
   opus mine  [flags]        captures -> TSV records only (preview; no API, no Anki)
   opus cards [flags]        TSV on stdin -> cards (review-only; add --anki to file them)
   opus add   FILE|DIR ...   copy into the corpus and index it   (corpus.py add; --merge ...)
   opus build [PATH ...]     (re)build the index                 (corpus.py build; --clean ...)
 
-Unlisted flags on the bare/mine forms pass through to opusmine (-d etc.).
-Suggested alias:  alias om='opus'
+vocab/sent set the batch's default card type; a '>' line prefix still forces a
+sentence card per line either way. Unlisted flags on vocab/sent/mine pass through
+to opusmine (-d etc.).
+Suggested alias:  alias ov='opus vocab'
 EOF
 }
 
@@ -36,7 +40,19 @@ parse_source() {
   done
 }
 
+run_pipeline() {  # $@ = extra opusmine args (the default card type)
+  "${SRC_CMD[@]}" \
+    | uv run "$DIR/opusmine.py" "$@" "${MINE_ARGS[@]}" \
+    | uv run "$DIR/opuscards.py" --anki
+}
+
 case "${1-}" in
+  vocab)
+    shift; parse_source "$@"
+    run_pipeline ;;
+  sent)
+    shift; parse_source "$@"
+    run_pipeline --type sentence ;;
   add|build)
     sub="$1"; shift
     exec python3 "$DIR/corpus.py" "$sub" "$@" ;;
@@ -46,11 +62,9 @@ case "${1-}" in
   cards)
     shift
     exec uv run "$DIR/opuscards.py" "$@" ;;
-  help|-h|--help)
+  ''|help|-h|--help)
     usage ;;
   *)
-    parse_source "$@"
-    "${SRC_CMD[@]}" \
-      | uv run "$DIR/opusmine.py" "${MINE_ARGS[@]}" \
-      | uv run "$DIR/opuscards.py" --anki ;;
+    echo "opus: unknown verb '$1'" >&2; echo >&2
+    usage >&2; exit 2 ;;
 esac
