@@ -2,7 +2,8 @@
 
 The note type for **vocab cards** (word on the front). `Chinese Sentences` uses the same
 field *names* but renders the Sentence on the front and doesn't need `Hint`, so one
-generator feeds both.
+generator feeds both note types — with a different prompt and field semantics per card
+type (sentence cards are described at the bottom of this file).
 
 Canonical field order: `Expression · Reading · Register · Sentence · Definition · Notes · Source · Hint`
 (order matters only for legacy TSV imports — AnkiConnect addresses fields by name).
@@ -46,3 +47,22 @@ Empty fields disappear on the card — the template wraps `Sentence`, `Notes`, `
 and `Hint` in conditionals. So a context-less vocab card (empty Sentence, empty Source)
 shows just Expression, Reading, and Definition with nothing dangling. The Expression is
 bolded inside the Sentence dynamically (the field itself stays clean).
+
+## Chinese Sentences — sentence cards
+
+For expressions, collocations, and non-compositional usages of known words, shown in
+their original sentence (front = sentence). Same field names, different semantics
+(prompt: `sentence_prompt.md`; spec: `handoff.md`):
+
+| Field | Sentence-card meaning |
+|---|---|
+| **Sentence** | The original sentence with the target wrapped in `<b></b>` **by the model** — the deliberate exception to the clean-field rule, because bound material (狠狠<b>敲他一笔</b>) and discontinuous spans (<b>敲</b>了他好大<b>一笔</b>) can't be bolded by template matching. `opuscards` accepts the bolding only if stripping the tags reproduces the mined sentence exactly; otherwise it stores the clean sentence and warns. A capture with no sentence is an error, not a context-less card. |
+| **Expression** | The target expression itself, untagged (back-side display, duplicate check). |
+| **Reading** | Pinyin of the target expression only. |
+| **Definition** | The *explanation* (释义): shortest monolingual definition that kills the most likely wrong reading — adaptive length, deliberately allowed to run longer than the vocab deck's ~40-hanzi cap when the nuance is load-bearing. Defines the sense used in this sentence, not all senses. Register is folded in as `〈…〉` (the note type has no Register field). |
+| **Notes** | Empty by design. Filled only when a `#` instruction asks for extras (a whole-sentence walkthrough, 近义词, variants). |
+| **Source** | Provenance, from `opusmine`, same as vocab. |
+
+Dropped from the handoff spec on purpose: the `Pattern` field (slot structure) and
+default near-synonyms — both judged noise for the majority of cards; synonyms are
+available per-card via `#`.

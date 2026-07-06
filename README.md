@@ -19,9 +19,16 @@ capture (Keep / clipboard)
    corpus.py ────► builds the search index the miner reads (run when you add texts)
 ```
 
-`opus` is the front door: bare, it runs `opusmine | opuscards --anki` on the clipboard;
-git-style verbs (`mine`, `cards`, `add`, `build`) dispatch to the individual tools,
-which all keep working standalone.
+`opus` is the front door: bare, it prints help; `opus vocab` and `opus sent` run
+`opusmine | opuscards --anki` on the clipboard with vocab or sentence as the batch's
+default card type, and the other git-style verbs (`mine`, `cards`, `add`, `build`)
+dispatch to the individual tools, which all keep working standalone.
+
+Two card types share the pipeline: **vocab** (word on the front, `card_prompt_zh.md`)
+and **sentence** (the original sentence on the front with the target expression
+bolded by the model, `sentence_prompt.md` — for collocations, idiomatic uses of known
+words, and other non-compositional chunks). The type is per-line (`>` prefix), so a
+batch can mix both.
 
 ## Setup (once)
 
@@ -33,22 +40,25 @@ which all keep working standalone.
    - **`Chinese Sentences`** (sentence-front) already exists; it needs
      `Sentence · Expression · Reading · Definition · Notes` and optionally `Source`.
      No `Hint` needed — the script skips fields a note type doesn't have, and folds
-     `Register` into the Definition as `〈…〉` when the field is missing.
+     `Register` into the Definition as `〈…〉` when the field is missing. Its
+     `Sentence` field holds the model-bolded front (`<b>…</b>` around the target;
+     verified against the mined sentence, see `schema.md`).
 3. **Env**: `export OPENAI_API_KEY=...` (optionally `OPENAI_MODEL`, default `gpt-5.5`).
 4. **Index**: `python3 corpus.py build` normalises `~/Chinese Text Analysis` into a
    `_index/` folder **beside the scripts** (kept out of the corpus so cloud-sync clients
    don't try to sync thousands of generated files). `opusmine` and `corpus` both resolve
    it from their own location, so keep them in the same directory.
-5. **Alias** (optional): `alias om=opus`. If you instead symlink onto your PATH, the
-   `_index/`, `card_prompt_zh.md`, and the scripts all resolve next to the *real* files
-   (symlinks are followed), so keep them together there.
+5. **Alias** (optional): `alias ov='opus vocab'` for the daily path. If you symlink
+   `opus` onto your PATH, the `_index/`, the prompts, and the scripts all resolve next
+   to the *real* files (symlinks are followed), so keep them together there.
 
 ## Daily use
 
 ```bash
 # everything through one command
-opus                                 # clipboard captures -> cards in Anki
-opus --file ~/keep_inbox.txt         # …from a synced plaintext file instead
+opus vocab                           # clipboard captures -> vocab cards in Anki
+opus sent                            # …same, but sentence cards by default
+opus vocab --file ~/keep_inbox.txt   # …from a synced plaintext file instead
 opus mine                            # preview the mined TSV (no API, no Anki)
 opus add ~/Downloads/newnovel.txt    # copy into corpus + index it
 opus build                           # rebuild the whole index
@@ -59,9 +69,9 @@ pbpaste | uv run opusmine.py | uv run opuscards.py --anki
 python3 corpus.py build
 ```
 
-Copy lines out of Google Keep and run `opus`. Keep has no clean local-file/API hook,
-so clipboard is the path; if you ever capture into something that syncs a `.txt`
-(Obsidian, Drafts, a Drive file), use `opus --file <path>` instead — already wired.
+Copy lines out of Google Keep and run `opus vocab`. Keep has no clean local-file/API
+hook, so clipboard is the path; if you ever capture into something that syncs a `.txt`
+(Obsidian, Drafts, a Drive file), use `opus vocab --file <path>` instead — already wired.
 
 ## Capture grammar
 
@@ -81,6 +91,12 @@ becomes a model instruction (never shown on the card); an inline `x#y` is left a
 
 "Looks like a sentence" = ≥12 chars or contains 。！？…；  (so a short two-word line is
 read as word+anchor, a long/punctuated one as a literal sentence).
+
+`opus sent` (or `opusmine --type sentence`) flips the batch default, so a paste of
+plain sentences becomes sentence cards without `>`-prefixing every line; the grammar
+is otherwise identical (naming a target, mining, anchors, and `#` instructions all
+work). On a sentence card the `#` instruction is also where per-card extras live:
+`… #近义词` or `… #讲讲整句` lands in Notes, which otherwise stays empty by design.
 
 ## Keeping the corpus clean
 
@@ -123,8 +139,8 @@ dropping most of a GBK/Big5 file's characters.
   (game-dump paths → display names used for `Source`). Mined hits shorter than the
   target + `MIN_MARGIN` are discarded as titles/menu entries; the rest are ranked
   punctuated-first, then by closeness to `IDEAL_LEN`.
-- `opuscards.py`: `NOTE_TYPES`, `BASE_TAGS`, `--deck`, `--model`. `NO_COLOR=1`
-  disables ANSI colour.
+- `opuscards.py`: `CARD_TYPES` (note type + prompt + JSON keys per capture type),
+  `BASE_TAGS`, `--deck`, `--model`. `NO_COLOR=1` disables ANSI colour.
 - `corpus.py`: cleaning regexes at the top, each commented. The one load-bearing
   rule: any line with no CJK is dropped (kills sprite/image ids).
 
@@ -135,6 +151,7 @@ dropping most of a GBK/Big5 file's characters.
 | `opusmine.py` | capture → target/sentence/source resolver (mine or passthrough) |
 | `opuscards.py` | GPT generation + AnkiConnect, pretty CLI review |
 | `corpus.py` | `add` (ingest a file) / `build` (rebuild index) |
-| `opus` | front door: bare = clipboard → cards; verbs `mine · cards · add · build` dispatch |
-| `card_prompt_zh.md` | the generation prompt (JSON out); `OPUS_PROMPT` to relocate |
+| `opus` | front door: bare = help; verbs `vocab · sent · mine · cards · add · build` dispatch |
+| `card_prompt_zh.md` | vocab-card generation prompt (JSON out); `OPUS_PROMPT` to relocate |
+| `sentence_prompt.md` | sentence-card generation prompt; `OPUS_SENTENCE_PROMPT` to relocate |
 | `front.html` `back.html` `styling.css` | the `Chinese Nova` card template |
