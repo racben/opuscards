@@ -197,7 +197,7 @@ def is_sentence_like(s: str) -> bool:
     return len(s) >= SENTENCE_LIKE or any(c in s for c in SENT_PUNCT)
 
 
-def parse_line(raw: str):
+def parse_line(raw: str, default_type: str = "vocab"):
     # An instruction starts at a "#" that opens the line or follows whitespace, so an
     # inline x#y (a URL fragment, a tag-like token inside a sentence) is left alone
     # instead of truncating the capture.
@@ -209,7 +209,7 @@ def parse_line(raw: str):
     if not body:
         return None
 
-    note_type = "vocab"
+    note_type = default_type
     if body.startswith(">"):
         note_type = "sentence"
         body = body[1:].strip()
@@ -253,11 +253,13 @@ def main() -> None:
     ap.add_argument("--file", type=Path, help="read captures from a file instead of stdin")
     ap.add_argument("-d", "--dumps", action="store_true",
                     help="also grep the raw game dumps when the index misses (default: index only)")
+    ap.add_argument("-t", "--type", choices=("vocab", "sentence"), default="vocab",
+                    help="note type for unprefixed lines; '>' still forces a sentence card (default: vocab)")
     args = ap.parse_args()
 
     lines = args.file.read_text(encoding="utf-8").splitlines() if args.file else sys.stdin
     for raw in lines:
-        parsed = parse_line(raw.rstrip("\n"))
+        parsed = parse_line(raw.rstrip("\n"), args.type)
         if not parsed:
             continue
         note_type, target, sentence, anchor, instruction = parsed
