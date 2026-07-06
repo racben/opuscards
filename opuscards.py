@@ -10,16 +10,20 @@
 Reads TSV from opusmine on stdin:
     note_type <TAB> target <TAB> sentence <TAB> source <TAB> instruction
 
-For each row it asks the model for discrete fields {expression, reading, definition,
-notes}, supplies Sentence/Source itself, and builds a note in the right note type:
-    vocab    -> Chinese Nova        (word on the front)
-    sentence -> Chinese Sentences   (sentence on the front)
+Each capture type has its own prompt, JSON keys, and Anki note type (CARD_TYPES):
+    vocab    -> Chinese Nova        (word on the front; card_prompt_zh.md)
+    sentence -> Chinese Sentences   (sentence on the front, target expression
+                bolded by the model; sentence_prompt.md)
+
+The script supplies Sentence/Source itself. For sentence cards the model returns the
+sentence with <b></b> around the target; the code verifies that stripping the tags
+gives back the exact input sentence and falls back to the clean one on mismatch.
 
 Every note is tagged `chatgpt` + `marked`, so new cards surface (starred) in your
 next review and you fix-or-unmark inline. A formatted card is printed for every row;
 with --anki it also adds the note and shows a ✓ / ⚠ duplicate / ✗ line. Fields the
 target note type doesn't have are silently skipped (so Chinese Sentences never
-needs a Hint field).
+needs a Hint field, and its missing Register folds into Definition as 〈…〉).
 
   echo '投名状\t世间英雄纷纷递来投名状。' | opuscards.py            # review only
   pbpaste | opusmine.py | opuscards.py --anki                       # full pipeline
@@ -30,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -38,8 +43,25 @@ import requests
 # --- config (env-overridable) ------------------------------------------------
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.5")          # generation model
 ANKI_URL = os.environ.get("ANKI_CONNECT_URL", "http://localhost:8765")  # AnkiConnect endpoint
-PROMPT_PATH = Path(os.environ.get("OPUS_PROMPT", str(Path(__file__).with_name("card_prompt_zh.md"))))
-NOTE_TYPES = {"vocab": "Chinese Nova", "sentence": "Chinese Sentences"}  # capture type -> Anki model
+
+# Capture type -> Anki note type, prompt file, and the JSON keys the model must return.
+# "front" (sentence cards only) is the input sentence with the target bolded by the
+# model — that's the one field the model may echo the sentence into, and it's verified
+# against the input before use. Prompts load lazily, so a missing sentence prompt only
+# matters once a sentence card actually comes through.
+_here = Path(__file__).parent
+CARD_TYPES = {
+    "vocab": {
+        "note_type": "Chinese Nova",
+        "prompt": Path(os.environ.get("OPUS_PROMPT", str(_here / "card_prompt_zh.md"))),
+        "keys": ("expression", "reading", "register", "definition", "notes"),
+    },
+    "sentence": {
+        "note_type": "Chinese Sentences",
+        "prompt": Path(os.environ.get("OPUS_SENTENCE_PROMPT", str(_here / "sentence_prompt.md"))),
+        "keys": ("front", "expression", "reading", "register", "definition", "notes"),
+    },
+}
 BASE_TAGS = ["chatgpt", "marked"]                                  # added to every note
 
 USE_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
@@ -82,30 +104,52 @@ def build_note(deck: str, model_name: str, fields: dict, tags: list[str]) -> dic
 
 # --- generation --------------------------------------------------------------
 # Enforced server-side (structured outputs), so the response is guaranteed to be
-# exactly this JSON object — no fence-stripping or brace-hunting needed.
-CARD_SCHEMA = {
-    "type": "object",
-    "properties": {k: {"type": "string"}
-                   for k in ("expression", "reading", "register", "definition", "notes")},
-    "required": ["expression", "reading", "register", "definition", "notes"],
-    "additionalProperties": False,
-}
+# exactly the JSON object the card type's keys describe — no fence-stripping or
+# brace-hunting needed.
+def card_schema(keys) -> dict:
+    return {
+        "type": "object",
+        "properties": {k: {"type": "string"} for k in keys},
+        "required": list(keys),
+        "additionalProperties": False,
+    }
 
 
-def generate(client, model: str, system_prompt: str, sentence: str, target: str, instruction: str):
+def system_prompt_for(cfg: dict) -> str:
+    """Load a card type's prompt on first use, so a missing sentence prompt only
+    matters once a sentence card actually comes through."""
+    if "system_prompt" not in cfg:
+        if not cfg["prompt"].exists():
+            raise RuntimeError(
+                f"prompt not found at {cfg['prompt']} (set OPUS_PROMPT / OPUS_SENTENCE_PROMPT)")
+        cfg["system_prompt"] = cfg["prompt"].read_text(encoding="utf-8")
+    return cfg["system_prompt"]
+
+
+def generate(client, model: str, cfg: dict, sentence: str, target: str, instruction: str) -> dict:
     prompt = f"Input:\n{sentence}\n\nTarget:\n{target}\n\nCustom instruction:\n{instruction}"
     resp = client.responses.create(
-        model=model, instructions=system_prompt, input=prompt,
+        model=model, instructions=system_prompt_for(cfg), input=prompt,
         text={"verbosity": "low",
               "format": {"type": "json_schema", "name": "card_fields",
-                         "schema": CARD_SCHEMA, "strict": True}},
+                         "schema": card_schema(cfg["keys"]), "strict": True}},
     )
     data = json.loads(resp.output_text)
-    return (data["expression"].strip(), data["reading"].strip(), data["register"].strip(),
-            data["definition"].strip(), data["notes"].strip())
+    return {k: data[k].strip() for k in cfg["keys"]}
+
+
+# "front" is the one field the model may echo the sentence into; its bolding is
+# accepted only if removing the tags gives back the input sentence unchanged.
+_BOLD_TAG = re.compile(r"</?b>")
 
 
 # --- pretty CLI --------------------------------------------------------------
+def emphasize(s: str) -> str:
+    """Render stored <b></b> as terminal bold-yellow; without color the raw tags
+    stay visible, which shows exactly what the Sentence field will hold."""
+    return s.replace("<b>", "\033[1;33m").replace("</b>", "\033[0m") if USE_COLOR else s
+
+
 def render(note_type, expr, reading, register, sentence, definition, notes, source, tags, footer):
     bar = c("2", "│")
     mark = c("2", "[句]" if note_type == "sentence" else "[词]")
@@ -118,7 +162,7 @@ def render(note_type, expr, reading, register, sentence, definition, notes, sour
         head += f"  {c('2', '·' + source)}"
     out = [head]
     if sentence:
-        out.append(f"{bar} {sentence}")
+        out.append(f"{bar} {emphasize(sentence)}")
     out.append(f"{bar} {definition}")
     if notes:
         out.append(f"{bar} {c('2', '\U0001F4DD ' + notes)}")
@@ -137,7 +181,8 @@ def main() -> int:
         epilog=(
             "input (TSV from opusmine):\n"
             "  note_type <TAB> target <TAB> sentence <TAB> source <TAB> instruction\n\n"
-            "env: OPENAI_API_KEY (required), OPENAI_MODEL, ANKI_CONNECT_URL, OPUS_PROMPT, NO_COLOR\n"
+            "env: OPENAI_API_KEY (required), OPENAI_MODEL, ANKI_CONNECT_URL,\n"
+            "     OPUS_PROMPT, OPUS_SENTENCE_PROMPT, NO_COLOR\n"
         ),
     )
     ap.add_argument("--model", default=DEFAULT_MODEL, help=f"OpenAI model (default: {DEFAULT_MODEL})")
@@ -151,13 +196,10 @@ def main() -> int:
     tags = BASE_TAGS + args.tag
 
     if args.dry_run:
-        client = system_prompt = None
+        client = None
     else:
         if not os.environ.get("OPENAI_API_KEY"):
             ap.error("OPENAI_API_KEY not set (or use --dry-run).")
-        if not PROMPT_PATH.exists():
-            ap.error(f"prompt not found at {PROMPT_PATH} (set OPUS_PROMPT).")
-        system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
         from openai import OpenAI
         client = OpenAI()
 
@@ -169,15 +211,30 @@ def main() -> int:
         cols = raw.rstrip("\n").split("\t")
         cols += [""] * (5 - len(cols))
         note_type, target, sentence, source, instruction = cols[:5]
-        model_name = NOTE_TYPES.get(note_type, NOTE_TYPES["vocab"])
+        cfg = CARD_TYPES.get(note_type, CARD_TYPES["vocab"])
+        model_name = cfg["note_type"]
         try:
+            # A sentence card IS its sentence; a capture that mined nothing has no card.
+            if note_type == "sentence" and not sentence:
+                raise ValueError("sentence card needs a sentence (no corpus hit?)")
             if args.dry_run:
-                expr, reading, register, definition, notes = (target or "测试", "cèshì", "文", "离线预览解释。", "")
+                d = dict.fromkeys(cfg["keys"], "")
+                d.update(expression=target or "测试", reading="cèshì", register="文",
+                         definition="离线预览解释。")
+                if "front" in d:
+                    d["front"] = sentence.replace(target, f"<b>{target}</b>", 1) if target else sentence
             else:
-                expr, reading, register, definition, notes = generate(
-                    client, args.model, system_prompt, sentence, target, instruction)
+                d = generate(client, args.model, cfg, sentence, target, instruction)
 
-            footer = ""
+            expr, reading, register = d["expression"], d["reading"], d["register"]
+            definition, notes = d["definition"], d["notes"]
+            footer_lines = []
+            if "front" in d:
+                if _BOLD_TAG.sub("", d["front"]) == sentence:
+                    sentence = d["front"]
+                else:
+                    footer_lines.append(c("33", "└ ⚠ bold check failed — kept the unbolded sentence"))
+
             if args.anki:
                 # Route register to its own field if the note type has one; otherwise fold it
                 # into the Definition as 〈文〉… so register survives until you add the field.
@@ -190,15 +247,16 @@ def main() -> int:
                     fields["Register"] = register
                 try:
                     nid = anki("addNote", note=build_note(args.deck, model_name, fields, tags))
-                    footer = c("32", f"\u2514 \u2713 added \u00b7 {nid}")
+                    footer_lines.append(c("32", f"\u2514 \u2713 added \u00b7 {nid}"))
                     n_added += 1
                 except RuntimeError as e:
                     if "duplicate" in str(e).lower():
-                        footer = c("33", "\u2514 \u26a0 skipped (duplicate)")
+                        footer_lines.append(c("33", "\u2514 \u26a0 skipped (duplicate)"))
                         n_dup += 1
                     else:
-                        footer = c("31", f"\u2514 \u2717 {e}")
+                        footer_lines.append(c("31", f"\u2514 \u2717 {e}"))
                         n_err += 1
+            footer = "\n".join(footer_lines)
             print(render(note_type, expr, reading, register, sentence, definition, notes, source, tags, footer))
             print()
         except Exception as e:
