@@ -16,6 +16,7 @@ usage:
   opus sent  [flags]        clipboard captures -> sentence cards in Anki
   opus vocab|sent --file F  ...from a plaintext inbox instead of the clipboard
   opus mine  [flags]        captures -> TSV records only (preview; no API, no Anki)
+  opus pairs [flags]        captures -> plain 'word<TAB>sentence' list (no API, no Anki)
   opus cards [flags]        TSV on stdin -> cards (review-only; add --anki to file them)
   opus add   FILE|DIR ...   copy into the corpus and index it   (corpus.py add; --merge ...)
   opus build [PATH ...]     (re)build the index                 (corpus.py build; --clean ...)
@@ -59,6 +60,9 @@ case "${1-}" in
   mine)
     shift; parse_source "$@"
     "${SRC_CMD[@]}" | uv run "$DIR/opusmine.py" "${MINE_ARGS[@]}" ;;
+  pairs)
+    shift; parse_source "$@"
+    "${SRC_CMD[@]}" | uv run "$DIR/opusmine.py" "${MINE_ARGS[@]}" | cut -f2,3 ;;
   cards)
     shift
     exec uv run "$DIR/opuscards.py" "$@" ;;

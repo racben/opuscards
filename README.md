@@ -60,6 +60,7 @@ opus vocab                           # clipboard captures -> vocab cards in Anki
 opus sent                            # …same, but sentence cards by default
 opus vocab --file ~/keep_inbox.txt   # …from a synced plaintext file instead
 opus mine                            # preview the mined TSV (no API, no Anki)
+opus pairs                           # plain 'word<TAB>sentence' list (no API, no Anki)
 opus add ~/Downloads/newnovel.txt    # copy into corpus + index it
 opus build                           # rebuild the whole index
 opus mine | opus cards               # long form of the pipeline, review-only
@@ -151,7 +152,7 @@ dropping most of a GBK/Big5 file's characters.
 | `opusmine.py` | capture → target/sentence/source resolver (mine or passthrough) |
 | `opuscards.py` | GPT generation + AnkiConnect, pretty CLI review |
 | `corpus.py` | `add` (ingest a file) / `build` (rebuild index) |
-| `opus` | front door: bare = help; verbs `vocab · sent · mine · cards · add · build` dispatch |
+| `opus` | front door: bare = help; verbs `vocab · sent · mine · pairs · cards · add · build` dispatch |
 | `card_prompt_zh.md` | vocab-card generation prompt (JSON out); `OPUS_PROMPT` to relocate |
 | `sentence_prompt.md` | sentence-card generation prompt; `OPUS_SENTENCE_PROMPT` to relocate |
 | `front.html` `back.html` `styling.css` | the `Chinese Nova` card template |
