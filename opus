@@ -29,8 +29,14 @@ EOF
 }
 
 # Split "--file X" out of the args: captures come from that file instead of the
-# clipboard; everything else is handed to opusmine untouched.
-SRC_CMD=(pbpaste)
+# clipboard; everything else is handed to opusmine untouched. Default source is
+# the clipboard, UNLESS stdin is piped (not a terminal), in which case read that
+# instead — lets `sed ... | opus pairs` etc. work without --file.
+if [[ -t 0 ]]; then
+  SRC_CMD=(pbpaste)
+else
+  SRC_CMD=(cat)
+fi
 MINE_ARGS=()
 parse_source() {
   while [[ $# -gt 0 ]]; do
