@@ -77,8 +77,9 @@ hook, so clipboard is the path; if you ever capture into something that syncs a 
 ## Capture grammar
 
 One line per card. The target/anchor split is on the **first space or Tab** (so phone
-capture with spaces is fine). A trailing ` #…` — hash at line start or after a space —
-becomes a model instruction (never shown on the card); an inline `x#y` is left alone.
+capture with spaces is fine). A trailing ` #…` — hash at line start, after a space, or
+after CJK punctuation (`…失陷」？#comment`) — becomes a model instruction (never shown
+on the card); an inline `x#y` is left alone.
 
 | you type | result |
 |---|---|

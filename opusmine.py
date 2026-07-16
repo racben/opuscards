@@ -7,8 +7,9 @@ either MINES a sentence from the corpus index or PASSES THROUGH a literal senten
 Emits TSV (one row per card):
     note_type <TAB> target <TAB> sentence <TAB> source <TAB> instruction
 
-Line grammar (a trailing  " #instruction" — hash at line start or after whitespace —
-is stripped first and passed to the model; an inline x#y is left alone):
+Line grammar (a trailing  " #instruction" — hash at line start, after whitespace, or
+after CJK punctuation — is stripped first and passed to the model; an inline x#y is
+left alone):
     word                  vocab card; mine a sentence for `word`
     word <TAB> anchor     vocab card; mine the shortest line containing `word` AND `anchor`
     word <TAB> <sentence> vocab card; literal sentence, explicit target (no mining)
@@ -198,10 +199,11 @@ def is_sentence_like(s: str) -> bool:
 
 
 def parse_line(raw: str, default_type: str = "vocab"):
-    # An instruction starts at a "#" that opens the line or follows whitespace, so an
-    # inline x#y (a URL fragment, a tag-like token inside a sentence) is left alone
+    # An instruction starts at a "#" that opens the line, follows whitespace, or follows
+    # CJK punctuation (CJK sentences end in 。？！ with no space before a trailing "#…"),
+    # so an inline x#y (a URL fragment, a tag-like token inside a sentence) is left alone
     # instead of truncating the capture.
-    m = re.search(r"(?:^|\s)#", raw)
+    m = re.search(r"(?:^|(?<=\s)|(?<=[。！？；：，、」』”’）】》〉…—～]))#", raw)
     if m:
         body, instruction = raw[:m.start()].strip(), raw[m.end():].strip()
     else:
@@ -237,8 +239,8 @@ def main() -> None:
         description="Resolve capture lines into  note_type<TAB>target<TAB>sentence<TAB>source<TAB>instruction  records.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "capture grammar (a trailing  ' #instruction' — hash after whitespace — is stripped\n"
-            " and passed to the model; the target/anchor split is on the first space OR tab):\n"
+            "capture grammar (a trailing  ' #instruction' — hash after whitespace or CJK punctuation —\n"
+            " is stripped and passed to the model; the target/anchor split is on the first space OR tab):\n"
             "  word                  vocab card; mine a sentence for `word`\n"
             "  word anchor           vocab card; mine the shortest line with `word` AND `anchor`\n"
             "  word a sentence。      vocab card; use that literal sentence (explicit target)\n"
