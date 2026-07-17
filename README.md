@@ -25,9 +25,9 @@ default card type, and the other git-style verbs (`mine`, `cards`, `add`, `build
 dispatch to the individual tools, which all keep working standalone.
 
 Three card types share the pipeline: **vocab** (word on the front, `card_prompt_zh.md`),
-**sentence** (the original sentence on the front with the target expression
-bolded by the model, `sentence_prompt.md` — for collocations, idiomatic uses of known
-words, and other non-compositional chunks), and **plain** (word on the front, *no*
+**sentence** (the original sentence on the front, `sentence_prompt.md` — for
+collocations, idiomatic uses of known words, and other non-compositional chunks;
+the note template bolds the target in the sentence with JS), and **plain** (word on the front, *no*
 sentence and no mining, `plain_prompt.md` — a quick English gloss plus an optional
 Usage note, for loan words, flora/fauna, and other terms where a monolingual
 definition adds nothing; note type `Chinese Vocab`). The type is per-line (`>`
@@ -44,8 +44,8 @@ prefix), so a vocab/sentence batch can mix both; `opus plain` sets plain for the
      `Sentence · Expression · Reading · Definition · Notes` and optionally `Source`.
      No `Hint` needed — the script skips fields a note type doesn't have, and folds
      `Register` into the Definition as `〈…〉` when the field is missing. Its
-     `Sentence` field holds the model-bolded front (`<b>…</b>` around the target;
-     verified against the mined sentence, see `schema.md`).
+     `Sentence` field is stored clean; the template's JS bolds the Expression
+     inside it at render time.
    - **`Chinese Vocab`** (plain cards) already exists; it needs
      `Expression · Reading · Definition · Usage`. Extra fields (`Image`, `Source`)
      are left blank — same skip-what's-missing rule as above.

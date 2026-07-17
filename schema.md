@@ -56,7 +56,7 @@ their original sentence (front = sentence). Same field names, different semantic
 
 | Field | Sentence-card meaning |
 |---|---|
-| **Sentence** | The original sentence with the target wrapped in `<b></b>` **by the model** — the deliberate exception to the clean-field rule, because bound material (狠狠<b>敲他一笔</b>) and discontinuous spans (<b>敲</b>了他好大<b>一笔</b>) can't be bolded by template matching. `opuscards` accepts the bolding only if stripping the tags reproduces the mined sentence exactly; otherwise it stores the clean sentence and warns. A capture with no sentence is an error, not a context-less card. |
+| **Sentence** | The original sentence, stored **clean** (no markup) — the template's JS bolds the target at render time, same as `Chinese Nova`. A capture with no sentence is an error, not a context-less card. |
 | **Expression** | The target expression itself, untagged (back-side display, duplicate check). |
 | **Reading** | Pinyin of the target expression only. |
 | **Definition** | The *explanation* (释义): shortest monolingual definition that kills the most likely wrong reading — adaptive length, deliberately allowed to run longer than the vocab deck's ~40-hanzi cap when the nuance is load-bearing. Defines the sense used in this sentence, not all senses. Register is folded in as `〈…〉` (the note type has no Register field). |
@@ -65,7 +65,9 @@ their original sentence (front = sentence). Same field names, different semantic
 
 Dropped from the handoff spec on purpose: the `Pattern` field (slot structure) and
 default near-synonyms — both judged noise for the majority of cards; synonyms are
-available per-card via `#`.
+available per-card via `#`. Also dropped later: model-side `<b></b>` bolding of the
+front (the handoff's `front` field) — the note template bolds the target with JS, so
+the model never echoes the sentence and the field stays clean.
 
 ## Chinese Vocab — plain cards
 

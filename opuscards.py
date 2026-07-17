@@ -12,14 +12,13 @@ Reads TSV from opusmine on stdin:
 
 Each capture type has its own prompt, JSON keys, and Anki note type (CARD_TYPES):
     vocab    -> Chinese Nova        (word on the front; card_prompt_zh.md)
-    sentence -> Chinese Sentences   (sentence on the front, target expression
-                bolded by the model; sentence_prompt.md)
+    sentence -> Chinese Sentences   (sentence on the front; sentence_prompt.md)
     plain    -> Chinese Vocab       (word on the front, NO sentence; English gloss
                 + optional Usage note; plain_prompt.md)
 
-The script supplies Sentence/Source itself. For sentence cards the model returns the
-sentence with <b></b> around the target; the code verifies that stripping the tags
-gives back the exact input sentence and falls back to the clean one on mismatch.
+The script supplies Sentence/Source itself; the Sentence field is always stored
+clean — the note templates bold the target dynamically (JS), the model never
+echoes the sentence.
 
 Every note is tagged `chatgpt` + `marked`, so new cards surface (starred) in your
 next review and you fix-or-unmark inline. A formatted card is printed for every row;
@@ -36,7 +35,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -47,10 +45,8 @@ DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.5")          # generation 
 ANKI_URL = os.environ.get("ANKI_CONNECT_URL", "http://localhost:8765")  # AnkiConnect endpoint
 
 # Capture type -> Anki note type, prompt file, and the JSON keys the model must return.
-# "front" (sentence cards only) is the input sentence with the target bolded by the
-# model — that's the one field the model may echo the sentence into, and it's verified
-# against the input before use. Prompts load lazily, so a missing sentence prompt only
-# matters once a sentence card actually comes through.
+# Prompts load lazily, so a missing sentence prompt only matters once a sentence card
+# actually comes through.
 _here = Path(__file__).parent
 CARD_TYPES = {
     "vocab": {
@@ -61,7 +57,7 @@ CARD_TYPES = {
     "sentence": {
         "note_type": "Chinese Sentences",
         "prompt": Path(os.environ.get("OPUS_SENTENCE_PROMPT", str(_here / "sentence_prompt.md"))),
-        "keys": ("front", "expression", "reading", "register", "definition", "notes"),
+        "keys": ("expression", "reading", "register", "definition", "notes"),
     },
     # Context-less by design: no sentence is mined or shown, the definition is a quick
     # English gloss (loan words, flora/fauna, ...), and Usage replaces Notes/Register.
@@ -147,18 +143,7 @@ def generate(client, model: str, cfg: dict, sentence: str, target: str, instruct
     return {k: data[k].strip() for k in cfg["keys"]}
 
 
-# "front" is the one field the model may echo the sentence into; its bolding is
-# accepted only if removing the tags gives back the input sentence unchanged.
-_BOLD_TAG = re.compile(r"</?b>")
-
-
 # --- pretty CLI --------------------------------------------------------------
-def emphasize(s: str) -> str:
-    """Render stored <b></b> as terminal bold-yellow; without color the raw tags
-    stay visible, which shows exactly what the Sentence field will hold."""
-    return s.replace("<b>", "\033[1;33m").replace("</b>", "\033[0m") if USE_COLOR else s
-
-
 def render(note_type, expr, reading, register, sentence, definition, notes, source, tags, footer):
     bar = c("2", "│")
     mark = c("2", {"sentence": "[句]", "plain": "[素]"}.get(note_type, "[词]"))
@@ -171,7 +156,7 @@ def render(note_type, expr, reading, register, sentence, definition, notes, sour
         head += f"  {c('2', '·' + source)}"
     out = [head]
     if sentence:
-        out.append(f"{bar} {emphasize(sentence)}")
+        out.append(f"{bar} {sentence}")
     out.append(f"{bar} {definition}")
     if notes:
         out.append(f"{bar} {c('2', '\U0001F4DD ' + notes)}")
@@ -231,8 +216,6 @@ def main() -> int:
                 stub = dict(expression=target or "测试", reading="cèshì", register="文",
                             definition="离线预览解释。")
                 d.update({k: v for k, v in stub.items() if k in d})
-                if "front" in d:
-                    d["front"] = sentence.replace(target, f"<b>{target}</b>", 1) if target else sentence
             else:
                 d = generate(client, args.model, cfg, sentence, target, instruction)
 
@@ -241,12 +224,6 @@ def main() -> int:
             definition, notes = d["definition"], d.get("notes", "")
             usage = d.get("usage", "")
             footer_lines = []
-            if "front" in d:
-                if _BOLD_TAG.sub("", d["front"]) == sentence:
-                    sentence = d["front"]
-                else:
-                    footer_lines.append(c("33", "└ ⚠ bold check failed — kept the unbolded sentence"))
-
             if args.anki:
                 # Route register to its own field if the note type has one; otherwise fold it
                 # into the Definition as 〈文〉… so register survives until you add the field.
