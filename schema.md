@@ -66,3 +66,18 @@ their original sentence (front = sentence). Same field names, different semantic
 Dropped from the handoff spec on purpose: the `Pattern` field (slot structure) and
 default near-synonyms — both judged noise for the majority of cards; synonyms are
 available per-card via `#`.
+
+## Chinese Vocab — plain cards
+
+For words where a monolingual definition adds nothing — loan words, flora/fauna,
+chemicals, transliterations. Deliberately context-less: `opus plain` never mines, and
+the note type has no Sentence field (prompt: `plain_prompt.md`):
+
+| Field | Plain-card meaning |
+|---|---|
+| **Expression** | The target word, returned exactly as given. |
+| **Reading** | Pinyin, tone marks, as for vocab cards. |
+| **Definition** | A quick **English** gloss — the shortest accurate equivalent (`yarrow`), not a dictionary entry. |
+| **Usage** | Extra note only when strictly necessary (rare): disambiguation, domain restriction, or a flag that the word isn't the everyday term for the thing (with the common word). |
+
+`Image` and `Source` exist on the note type but are left blank by the pipeline.

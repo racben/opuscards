@@ -24,11 +24,14 @@ capture (Keep / clipboard)
 default card type, and the other git-style verbs (`mine`, `cards`, `add`, `build`)
 dispatch to the individual tools, which all keep working standalone.
 
-Two card types share the pipeline: **vocab** (word on the front, `card_prompt_zh.md`)
-and **sentence** (the original sentence on the front with the target expression
+Three card types share the pipeline: **vocab** (word on the front, `card_prompt_zh.md`),
+**sentence** (the original sentence on the front with the target expression
 bolded by the model, `sentence_prompt.md` — for collocations, idiomatic uses of known
-words, and other non-compositional chunks). The type is per-line (`>` prefix), so a
-batch can mix both.
+words, and other non-compositional chunks), and **plain** (word on the front, *no*
+sentence and no mining, `plain_prompt.md` — a quick English gloss plus an optional
+Usage note, for loan words, flora/fauna, and other terms where a monolingual
+definition adds nothing; note type `Chinese Vocab`). The type is per-line (`>`
+prefix), so a vocab/sentence batch can mix both; `opus plain` sets plain for the batch.
 
 ## Setup (once)
 
@@ -43,6 +46,9 @@ batch can mix both.
      `Register` into the Definition as `〈…〉` when the field is missing. Its
      `Sentence` field holds the model-bolded front (`<b>…</b>` around the target;
      verified against the mined sentence, see `schema.md`).
+   - **`Chinese Vocab`** (plain cards) already exists; it needs
+     `Expression · Reading · Definition · Usage`. Extra fields (`Image`, `Source`)
+     are left blank — same skip-what's-missing rule as above.
 3. **Env**: `export OPENAI_API_KEY=...` (optionally `OPENAI_MODEL`, default `gpt-5.5`).
 4. **Index**: `python3 corpus.py build` normalises `~/Chinese Text Analysis` into a
    `_index/` folder **beside the scripts** (kept out of the corpus so cloud-sync clients
@@ -58,6 +64,7 @@ batch can mix both.
 # everything through one command
 opus vocab                           # clipboard captures -> vocab cards in Anki
 opus sent                            # …same, but sentence cards by default
+opus plain                           # clipboard words -> plain cards (no sentence; English gloss)
 opus vocab --file ~/keep_inbox.txt   # …from a synced plaintext file instead
 opus mine                            # preview the mined TSV (no API, no Anki)
 opus pairs                           # plain 'word<TAB>sentence' list (no API, no Anki)
@@ -153,7 +160,8 @@ dropping most of a GBK/Big5 file's characters.
 | `opusmine.py` | capture → target/sentence/source resolver (mine or passthrough) |
 | `opuscards.py` | GPT generation + AnkiConnect, pretty CLI review |
 | `corpus.py` | `add` (ingest a file) / `build` (rebuild index) |
-| `opus` | front door: bare = help; verbs `vocab · sent · mine · pairs · cards · add · build` dispatch |
+| `opus` | front door: bare = help; verbs `vocab · sent · plain · mine · pairs · cards · add · build` dispatch |
 | `card_prompt_zh.md` | vocab-card generation prompt (JSON out); `OPUS_PROMPT` to relocate |
 | `sentence_prompt.md` | sentence-card generation prompt; `OPUS_SENTENCE_PROMPT` to relocate |
+| `plain_prompt.md` | plain-card generation prompt (English gloss); `OPUS_PLAIN_PROMPT` to relocate |
 | `front.html` `back.html` `styling.css` | the `Chinese Nova` card template |
