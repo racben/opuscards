@@ -32,7 +32,7 @@ Never invent an example sentence: sentences come only from my captures. Preserve
 
 **Sentence — Chinese Sentences.** For expressions, collocations, non-compositional uses of known words. All field content in Chinese.
 - Target: pick the single chunk most likely to be misread — prefer "plausible but wrong surface reading" over mere rarity. Never ask; if several candidates, take the least compositional.
-- Sentence field: my sentence reproduced **exactly**, with the target wrapped in `<b></b>`. Bold bound material in (狠狠<b>敲他一笔</b>！); bold discontinuously across long insertions (<b>敲</b>了他好大<b>一笔</b>). Stripping the tags must give back my input character-for-character.
+- Sentence field: my sentence reproduced **exactly** as given — clean, no `<b>` tags or any other markup (the card template bolds the target with JS).
 - `definition`: the shortest monolingual 释义 that kills the most likely wrong reading — adaptive length, allowed past 40 hanzi when the nuance is load-bearing. Define the sense in THIS sentence only; 这里指… is fine.
 - Register: the note type has no Register field — fold it into the definition as a 〈…〉 prefix (e.g. 〈口〉…) only when getting it wrong would cause misuse.
 - `notes`: empty unless my `#instruction` asks for extras (近义词, 讲讲整句, variants).
@@ -52,9 +52,9 @@ Never invent an example sentence: sentences come only from my captures. Preserve
 │ 旧时投靠山寨等所纳的凭证，多为人命；比喻表忠心的见面礼。
 ```
 
-`[词]` vocab · `[句]` sentence · `[素]` plain. Line 1: expression, reading, 〈register〉 if any, ·Source if any. Then sentence (if any, target bolded for display), definition, and `│ 📝 notes/usage` if non-empty. Add a `💬 …` line under a block for anything I should know that does NOT belong on the card — e.g. a word like 逐鹿 that's awkward to card out of its allusive context (suggest the better treatment), a likely typo, an ambiguous parse you resolved. Comments never go into the TSV.
+`[词]` vocab · `[句]` sentence · `[素]` plain. Line 1: expression, reading, 〈register〉 if any, ·Source if any. Then sentence (if any), definition, and `│ 📝 notes/usage` if non-empty. Add a `💬 …` line under a block for anything I should know that does NOT belong on the card — e.g. a word like 逐鹿 that's awkward to card out of its allusive context (suggest the better treatment), a likely typo, an ambiguous parse you resolved. Comments never go into the TSV.
 
-**Part 2 — TSV files.** One fenced code block per note type that actually has cards, labelled with a filename (`nova.tsv`, `sentences.tsv`, `plain.tsv`). Each starts with Anki import headers, then one tab-separated row per card. Column order is fixed — it must match the note type's field order:
+**Part 2 — TSV files.** One **downloadable file** per note type that actually has cards — `nova.tsv`, `sentences.tsv`, `plain.tsv`. Create real file attachments (use your code-execution / file tool); I download them on my phone and import into AnkiDroid, which reads the `#` headers below. Only if you cannot produce downloadable files, fall back to one fenced code block per file. Fields must be separated by real tab characters (never spaces), with no tabs or newlines inside a field. Each file starts with Anki import headers, then one row per card. Column order is fixed — it must match the note type's field order:
 
 ```
 #separator:Tab
@@ -71,7 +71,7 @@ Expression	Reading	Sentence	Definition	Register	Notes	Source	Hint(empty)
 #notetype:Chinese Sentences
 #deck:Chinese
 #tags:chatgpt marked
-Sentence(with <b></b>)	Expression	Reading	Definition	Notes	Source
+Sentence	Expression	Reading	Definition	Notes	Source
 ```
 
 ```
@@ -106,7 +106,7 @@ Output:
 │ 旧时投靠山寨等所纳的凭证，多为人命；比喻表忠心的见面礼。语本《水浒传》。
 
 [句] 往心里去  wǎng xīn li qù  ·蛮荒纪
-│ 我就随口一说，你别<b>往心里去</b>。
+│ 我就随口一说，你别往心里去。
 │ 〈口〉把别人的话当真，为此介意、难过。多用于劝慰：「别往心里去」＝别在意。
 │ 📝 近义词：介意、计较、放在心上。
 
@@ -136,7 +136,7 @@ Output:
 #notetype:Chinese Sentences
 #deck:Chinese
 #tags:chatgpt marked
-我就随口一说，你别<b>往心里去</b>。	往心里去	wǎng xīn li qù	〈口〉把别人的话当真，为此介意、难过。多用于劝慰：「别往心里去」＝别在意。	近义词：介意、计较、放在心上。	蛮荒纪
+我就随口一说，你别往心里去。	往心里去	wǎng xīn li qù	〈口〉把别人的话当真，为此介意、难过。多用于劝慰：「别往心里去」＝别在意。	近义词：介意、计较、放在心上。	蛮荒纪
 ```
 
 `plain.tsv`
