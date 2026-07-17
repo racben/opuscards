@@ -78,6 +78,6 @@ the note type has no Sentence field (prompt: `plain_prompt.md`):
 | **Expression** | The target word, returned exactly as given. |
 | **Reading** | Pinyin, tone marks, as for vocab cards. |
 | **Definition** | A quick **English** gloss — the shortest accurate equivalent (`yarrow`), not a dictionary entry. |
-| **Usage** | Extra note only when strictly necessary (rare): disambiguation, domain restriction, or a flag that the word isn't the everyday term for the thing (with the common word). |
+| **Usage** | Extra note only when strictly necessary (rare): disambiguation, domain restriction, register flag (regional/dialect, slang, vulgar, dated), or a flag that the word isn't the everyday term for the thing (with the common word). |
 
 `Image` and `Source` exist on the note type but are left blank by the pipeline.
