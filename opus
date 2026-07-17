@@ -14,7 +14,8 @@ usage() {
 usage:
   opus vocab [flags]        clipboard captures -> vocab cards in Anki    (the daily path)
   opus sent  [flags]        clipboard captures -> sentence cards in Anki
-  opus vocab|sent --file F  ...from a plaintext inbox instead of the clipboard
+  opus plain [flags]        clipboard words -> plain vocab cards (no sentence; English gloss)
+  opus vocab|sent|plain --file F  ...from a plaintext inbox instead of the clipboard
   opus mine  [flags]        captures -> TSV records only (preview; no API, no Anki)
   opus pairs [flags]        captures -> plain 'word<TAB>sentence' list (no API, no Anki)
   opus cards [flags]        TSV on stdin -> cards (review-only; add --anki to file them)
@@ -60,6 +61,9 @@ case "${1-}" in
   sent)
     shift; parse_source "$@"
     run_pipeline --type sentence ;;
+  plain)
+    shift; parse_source "$@"
+    run_pipeline --type plain ;;
   add|build)
     sub="$1"; shift
     exec python3 "$DIR/corpus.py" "$sub" "$@" ;;

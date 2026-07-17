@@ -255,7 +255,7 @@ def main() -> None:
     ap.add_argument("--file", type=Path, help="read captures from a file instead of stdin")
     ap.add_argument("-d", "--dumps", action="store_true",
                     help="also grep the raw game dumps when the index misses (default: index only)")
-    ap.add_argument("-t", "--type", choices=("vocab", "sentence"), default="vocab",
+    ap.add_argument("-t", "--type", choices=("vocab", "sentence", "plain"), default="vocab",
                     help="note type for unprefixed lines; '>' still forces a sentence card (default: vocab)")
     args = ap.parse_args()
 
@@ -266,7 +266,9 @@ def main() -> None:
             continue
         note_type, target, sentence, anchor, instruction = parsed
         source = ""
-        if not sentence and target:            # nothing literal given -> mine
+        # Plain cards are deliberately context-less (no Sentence field on the note
+        # type), so there is nothing to mine — the word goes straight through.
+        if not sentence and target and note_type != "plain":
             sentence, source = mine(target, anchor, args.dumps)
         # TSV is the wire format: a stray tab inside a field would shift columns
         # downstream, so flatten any to a space here at the single emit point.

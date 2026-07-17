@@ -14,6 +14,8 @@ Each capture type has its own prompt, JSON keys, and Anki note type (CARD_TYPES)
     vocab    -> Chinese Nova        (word on the front; card_prompt_zh.md)
     sentence -> Chinese Sentences   (sentence on the front, target expression
                 bolded by the model; sentence_prompt.md)
+    plain    -> Chinese Vocab       (word on the front, NO sentence; English gloss
+                + optional Usage note; plain_prompt.md)
 
 The script supplies Sentence/Source itself. For sentence cards the model returns the
 sentence with <b></b> around the target; the code verifies that stripping the tags
@@ -60,6 +62,13 @@ CARD_TYPES = {
         "note_type": "Chinese Sentences",
         "prompt": Path(os.environ.get("OPUS_SENTENCE_PROMPT", str(_here / "sentence_prompt.md"))),
         "keys": ("front", "expression", "reading", "register", "definition", "notes"),
+    },
+    # Context-less by design: no sentence is mined or shown, the definition is a quick
+    # English gloss (loan words, flora/fauna, ...), and Usage replaces Notes/Register.
+    "plain": {
+        "note_type": "Chinese Vocab",
+        "prompt": Path(os.environ.get("OPUS_PLAIN_PROMPT", str(_here / "plain_prompt.md"))),
+        "keys": ("expression", "reading", "definition", "usage"),
     },
 }
 BASE_TAGS = ["chatgpt", "marked"]                                  # added to every note
@@ -152,7 +161,7 @@ def emphasize(s: str) -> str:
 
 def render(note_type, expr, reading, register, sentence, definition, notes, source, tags, footer):
     bar = c("2", "│")
-    mark = c("2", "[句]" if note_type == "sentence" else "[词]")
+    mark = c("2", {"sentence": "[句]", "plain": "[素]"}.get(note_type, "[词]"))
     head = f"{mark} {c('1;33', expr)}"
     if reading:
         head += f"  {c('36', reading)}"
@@ -182,7 +191,7 @@ def main() -> int:
             "input (TSV from opusmine):\n"
             "  note_type <TAB> target <TAB> sentence <TAB> source <TAB> instruction\n\n"
             "env: OPENAI_API_KEY (required), OPENAI_MODEL, ANKI_CONNECT_URL,\n"
-            "     OPUS_PROMPT, OPUS_SENTENCE_PROMPT, NO_COLOR\n"
+            "     OPUS_PROMPT, OPUS_SENTENCE_PROMPT, OPUS_PLAIN_PROMPT, NO_COLOR\n"
         ),
     )
     ap.add_argument("--model", default=DEFAULT_MODEL, help=f"OpenAI model (default: {DEFAULT_MODEL})")
@@ -219,15 +228,18 @@ def main() -> int:
                 raise ValueError("sentence card needs a sentence (no corpus hit?)")
             if args.dry_run:
                 d = dict.fromkeys(cfg["keys"], "")
-                d.update(expression=target or "测试", reading="cèshì", register="文",
-                         definition="离线预览解释。")
+                stub = dict(expression=target or "测试", reading="cèshì", register="文",
+                            definition="离线预览解释。")
+                d.update({k: v for k, v in stub.items() if k in d})
                 if "front" in d:
                     d["front"] = sentence.replace(target, f"<b>{target}</b>", 1) if target else sentence
             else:
                 d = generate(client, args.model, cfg, sentence, target, instruction)
 
-            expr, reading, register = d["expression"], d["reading"], d["register"]
-            definition, notes = d["definition"], d["notes"]
+            # Not every card type has every key: plain has usage instead of register/notes.
+            expr, reading, register = d["expression"], d["reading"], d.get("register", "")
+            definition, notes = d["definition"], d.get("notes", "")
+            usage = d.get("usage", "")
             footer_lines = []
             if "front" in d:
                 if _BOLD_TAG.sub("", d["front"]) == sentence:
@@ -242,7 +254,8 @@ def main() -> int:
                 has_register = bool(avail) and "Register" in avail
                 definition_out = definition if (has_register or not register) else f"〈{register}〉{definition}"
                 fields = {"Expression": expr, "Reading": reading, "Sentence": sentence,
-                          "Definition": definition_out, "Notes": notes, "Source": source, "Hint": ""}
+                          "Definition": definition_out, "Notes": notes, "Usage": usage,
+                          "Source": source, "Hint": ""}
                 if has_register:
                     fields["Register"] = register
                 try:
@@ -257,7 +270,8 @@ def main() -> int:
                         footer_lines.append(c("31", f"\u2514 \u2717 {e}"))
                         n_err += 1
             footer = "\n".join(footer_lines)
-            print(render(note_type, expr, reading, register, sentence, definition, notes, source, tags, footer))
+            print(render(note_type, expr, reading, register, sentence, definition,
+                         notes or usage, source, tags, footer))
             print()
         except Exception as e:
             n_err += 1
