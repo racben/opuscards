@@ -164,4 +164,5 @@ dropping most of a GBK/Big5 file's characters.
 | `card_prompt_zh.md` | vocab-card generation prompt (JSON out); `OPUS_PROMPT` to relocate |
 | `sentence_prompt.md` | sentence-card generation prompt; `OPUS_SENTENCE_PROMPT` to relocate |
 | `plain_prompt.md` | plain-card generation prompt (English gloss); `OPUS_PLAIN_PROMPT` to relocate |
+| `chat_prompt.md` | standalone travel prompt: paste into a chat app, get review + importable TSVs (no API, no AnkiConnect) |
 | `front.html` `back.html` `styling.css` | the `Chinese Nova` card template |
